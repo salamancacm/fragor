@@ -8,3 +8,6 @@ coverage/
 .DS_Store
 Thumbs.db
 .claude/settings.local.json
+out/
+next-env.d.ts
+.claude/launch.json

@@ -14,7 +14,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./schema/scenario.schema.json": "./schema/scenario.schema.json"
+    "./schema/scenario.schema.json": "./schema/scenario.schema.json",
+    "./examples/*": "./examples/*"
   },
   "dependencies": {
     "@fragor/engine": "workspace:*",
