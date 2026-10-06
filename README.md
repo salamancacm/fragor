@@ -15,7 +15,7 @@ numbers. All numbers shown anywhere in Fragor are computed by the engine from yo
 
 ## Status
 
-Early development. Current milestone: **M4 (minimal web UI)**, not started. The engine (`@fragor/engine`, pure
+Early development. Milestones M0-M4 are done; next steps are being planned.. The engine (`@fragor/engine`, pure
 TypeScript, zero runtime dependencies) is built first; the UI comes later.
 
 | Milestone | Scope | Status |
@@ -24,7 +24,7 @@ TypeScript, zero runtime dependencies) is built first; the UI comes later.
 | M1 | Engine core: heap, RNG, distributions, histogram, single-node service | done |
 | M2 | Resilience policies, faults, canonical scenarios | done |
 | M3 | Scenario schemas, patches, findings, CLI | done |
-| M4 | Minimal web UI | planned |
+| M4 | Minimal web UI | done |
 
 ## What the engine models today
 
@@ -53,6 +53,17 @@ The first command prints the outcome of a slow payment provider behind timeouts 
 plus findings such as the cascade of saturated workers. The second shows what a circuit breaker
 with a fallback changes. What-if from the command line:
 `--set edges.order-payment.policies.timeout.valueMs=1500`.
+
+## Web UI
+
+```bash
+pnpm web:dev      # http://localhost:3000
+pnpm build        # CLI bundle + static site in apps/web/out
+```
+
+Pick a canonical scenario, run it, change timeouts, retries, circuit breakers or traffic, and run
+again: every chart and number is compared with the previous run. The simulation runs in a Web Worker
+in your browser; the site is static and sends nothing anywhere.
 
 ## Development
 

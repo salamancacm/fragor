@@ -44,8 +44,9 @@ Test paths are relative to `packages/engine/test/`.
 - Draws that depend on a parameter value are always made (error decision, call probability,
   packet loss, retry jitter), so changing that parameter does not shift the stream.
 - `constant`; `uniform` on `[minMs, maxMs)`; `exponential` = `-mean * ln(U)`; `normal` with
-  Box-Muller, **truncated** at 0 by rejection (requires `meanMs >= 0`); `lognormal` with
-  `mu = ln(p50)`, `sigma = (ln(p99) - ln(p50)) / 2.3263`; `mixture` by normalized weights.
+  the Marsaglia polar method, **truncated** at 0 by rejection (requires `meanMs >= 0`);
+  `lognormal` with `mu = ln(p50)`, `sigma = (ln(p99) - ln(p50)) / 2.3263`; `mixture` by normalized
+  weights. `ln` and `exp` are `detLog` / `detExp` (core/math.ts), see the last section.
 - Validation errors name the field path. Test: `core/distributions.test.ts`.
 - **Tolerance of test 12:** with n = 200 000 samples and a fixed seed, sampled lognormal p50 and
   p99 lie within 4 standard errors of the target quantile in log space,
@@ -243,10 +244,13 @@ Test paths are relative to `packages/engine/test/`.
 - `fingerprint`: cyrb128 of the canonical JSON of the result without `stats.wallClockMs`.
   Tests: `determinism.test.ts`, `scenarios.test.ts` (test groups 1 and 15).
 
-## Known limitation: cross-engine determinism
+## Cross-engine determinism — design, verified
 
-Determinism is guaranteed for the same JavaScript engine. Sampling uses `Math.log`, `Math.exp`,
-`Math.cos` and `Math.sqrt`; ECMAScript does not require `log`/`exp`/`cos` to be correctly rounded,
-so different engines could differ in the last bit. Node and Chromium both use V8, so the CLI and a
-Chromium web worker are expected to match; this is not yet verified by a test. Histogram
-bucketing uses only exact integer arithmetic.
+ECMAScript lets engines approximate `Math.log`, `Math.exp`, `Math.cos` and `Math.pow`, and Node and
+Chrome were observed to differ in the last bit (different fingerprint for scenario 01). The engine
+therefore uses `detLog` / `detExp` (core/math.ts: basic arithmetic and exact bit manipulation, about
+2 ulp accuracy), the Marsaglia polar method for normal samples (no trigonometry), repeated
+multiplication for integer powers, and `Math.sqrt` / `Math.floor` / `Math.imul` / `Math.clz32`,
+which are exact. A purity test forbids the platform transcendental functions and `**` in the engine.
+Verified on 2026-10-06: the six canonical scenarios give the same fingerprints in Node 22, Node 24
+and a Chrome Web Worker. Tests: `core/math.test.ts`, `purity.test.ts`.

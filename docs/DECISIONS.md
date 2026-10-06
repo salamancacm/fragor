@@ -212,3 +212,57 @@ Decision: `node:util` `parseArgs`; `main(argv, io)` returns an exit code and rec
 effects (stdout, stderr, files) so it is tested in-process. Exit codes: 0 ok, 1 runtime, 2 usage
 or invalid input. `run --json` prints the SimulationResult, `run --digest` the analysis digest,
 `compare --json` the comparison. CI builds the bundle and smoke-runs it.
+
+## 2026-10-06 — M4: web dependency versions
+
+| Package | Version | Why |
+| --- | --- | --- |
+| next | ^16.4.0 | App Router, static export (`output: "export"`), Turbopack, Web Worker bundling |
+| react / react-dom | ^19.3.0 | UI |
+| tailwindcss / @tailwindcss/postcss / postcss | ^4.3.3 / ^4.3.3 / ^8.5.29 | styling (Tailwind v4) |
+| shadcn (dev), radix-ui, class-variance-authority, cn, lucide-react, tw-animate-css | ^4.21.3, ^1.7.0, ^0.7.1, ^0.4.0, ^1.52.0, ^1.4.0 | shadcn/ui components (preset radix-nova) and their runtime: `cn` is shadcn's class merger (github.com/shadcn-ui/cn) |
+| @xyflow/react | ^12.12.0 | architecture graph |
+| recharts | ^3.10.1 | time series |
+| @types/react, @types/react-dom, @types/node | ^19.3.0, ^19.3.0, ^24 | typing |
+
+## 2026-10-06 — M4: the web app is static and private by default
+Decision: `output: "export"`; the engine runs in a Web Worker in the visitor's browser and no
+server exists. No remote fonts (shadcn's Geist via `next/font/google` was removed in favor of a
+system font stack), no analytics, and Next.js telemetry is disabled in every script
+(`NEXT_TELEMETRY_DISABLED=1`; `.npmrc` sets `shell-emulator=true` so that syntax works on
+Windows). Verified: the exported site only loads resources from its own origin.
+
+## 2026-10-06 — M4: cross-engine determinism fixed in the engine
+Context: the first browser run of scenario 01 gave a different fingerprint than Node. The
+difference was one utilization value in the last bit, caused by `Math.log`/`Math.exp`/`Math.cos`
+returning slightly different bits in Chrome and Node (ECMAScript allows implementation-approximated
+results). Decision: `core/math.ts` implements `detLog` and `detExp` with basic arithmetic and exact
+bit manipulation only; the normal sampler uses the Marsaglia polar method (no cosine); integer
+powers use repeated multiplication. A purity test forbids platform transcendental functions and
+`**` in the engine. Verified: the six canonical scenarios give identical fingerprints in Node 22,
+Node 24 and the Chrome web worker. Cost: about 10 ms more for scenario 01 (still far within budget).
+All fingerprints changed once (same distributions, different exact samples).
+
+## 2026-10-06 — M4: UI parameters are patches
+Decision: the parameters panel (traffic multiplier; per edge: timeout, retries, breaker on/off)
+is turned into `PatchOp[]` by `patchFor` and applied with `applyPatch`, so every what-if is
+validated and listed on screen. Adding retries to an edge without a policy uses the SmallRye
+@Retry defaults (delay 0, jitter 200 ms); turning a breaker on uses the SmallRye @CircuitBreaker
+defaults (window 20, ratio 0.5, delay 5000 ms, successThreshold 1).
+
+## 2026-10-06 — M4: comparison is always "previous run vs this run"
+Decision: each finished run becomes "current" and the one before "previous"; cards, the table
+and the dashed lines in the charts compare them with `compareResults`. Runs of different scenarios
+can be compared too (labels say which).
+
+## 2026-10-06 — M4: tooling notes
+- shadcn's CLI and any `pnpm` started from inside a pnpm script fail on Windows while the
+  project-local Node shim is on PATH (see the M0 note). shadcn was run once with the shim moved
+  aside; nothing in the repository depends on that workaround. Root scripts call `next` through
+  `node apps/web/node_modules/next/dist/bin/next` for the same reason.
+- `exactOptionalPropertyTypes` stays on for the web app; the one generated component that broke
+  (slider) was fixed instead of relaxing the compiler.
+- TypeScript 7 removed `baseUrl`; the `@/*` alias uses `paths` only.
+- Web tests cover the pure logic (worker run loop and protocol, params to patches, graph layout,
+  health colors, chart data). The UI itself was verified in a browser (dev server and static
+  export).

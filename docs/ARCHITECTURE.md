@@ -6,7 +6,7 @@ Fragor is a monorepo. The engine is the product; every other package is a consum
 packages/engine     @fragor/engine     pure TS, zero runtime deps, no DOM, no Node APIs
 packages/scenarios  @fragor/scenarios  Zod schemas, JSON Schema, patches, findings, digest, examples
 packages/cli        @fragor/cli        `fragor run|compare|schema` (bundled with esbuild)
-apps/web            Next.js UI         (M4) runs the engine in a Web Worker
+apps/web            @fragor/web        Next.js static UI; runs the engine in a Web Worker
 ```
 
 Dependency direction: `web`, `cli`, `scenarios` -> `engine`. Never the reverse.
@@ -25,6 +25,7 @@ engine/src
 │  ├─ distributions.ts  compileDist(): validates a Dist and returns a sampler
 │  ├─ histogram.ts      log-linear histogram (integer ns, 128 sub-buckets per octave)
 │  ├─ fifo.ts           O(1) FIFO queue
+│  ├─ math.ts           detLog / detExp: identical bits in every JS engine
 │  └─ clock.ts          the only wall-clock access (stats.wallClockMs)
 ├─ model/types.ts       source of truth for every input/output type
 ├─ runtime/
@@ -203,6 +204,35 @@ explainer consumes; the explainer cites its evidence instead of inventing number
 (`parseScenario`), applies `--set` / `--unset` / `--seed` as typed patches (`applyPatch`), runs
 `simulate`, and prints a summary with findings, the JSON result, the digest, or a before/after
 comparison (`compareResults`). `build.mjs` bundles it into `dist/fragor.mjs`.
+
+## Web app (`apps/web`)
+
+```
+apps/web/src
+├─ app/                 layout (system fonts, TooltipProvider) and the single Runner page
+├─ worker/
+│  ├─ sim.worker.ts     the Web Worker: receives `run` / `cancel`, posts progress and results
+│  └─ run-loop.ts       runInChunks(): runUntil in chunks + snapshot(), then finish + findings
+├─ lib/
+│  ├─ protocol.ts       typed messages: ToWorker (run, cancel) / FromWorker (progress, done, cancelled, error)
+│  ├─ use-simulation.ts React hook owning the worker; reducer keeps `current` and `previous` runs
+│  ├─ params.ts         parameters panel state -> PatchOp[] (validated by applyPatch)
+│  ├─ graph-layout.ts   layered DAG layout (callers left of dependencies)
+│  ├─ health.ts         node/edge health per time bucket (display thresholds)
+│  ├─ chart-data.ts     chart rows (current run + previous run overlay, fault windows)
+│  └─ examples.ts       the canonical scenarios, validated with parseScenario
+└─ components/          Runner, ArchitectureGraph (@xyflow/react), Charts (Recharts), SummaryCards,
+                        ParamsPanel, Insights (findings), ComparisonTable, HonestyBanner, ui/ (shadcn)
+```
+
+Flow: the user picks a scenario and adjusts parameters -> `patchFor` + `applyPatch` produce a
+validated scenario -> `run` posts it to the worker -> the worker posts `progress` (with a live
+snapshot) about 60 times and then `done` with the result and its findings -> the reducer moves the
+old `current` to `previous` -> cards, graph, charts, insights and the before/after table render
+from plain JSON. The time slider selects a bucket; the graph colors nodes and edges by their health
+in that bucket; clicking a finding's evidence moves the slider and highlights the target.
+
+The web app is a static export: no server, no network calls, no telemetry.
 
 ## Serialization
 
