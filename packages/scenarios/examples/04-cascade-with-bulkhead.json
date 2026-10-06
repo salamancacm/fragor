@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "name": "cascade-with-bulkhead",
+  "description": "Scenario 03 plus a bulkhead of 15 concurrent calls on gateway -> order-service: /orders fails fast with bulkhead-full once 15 calls are stuck, and /users keeps its workers.",
+  "seed": 7,
+  "durationMs": 60000,
+  "metrics": {
+    "bucketMs": 1000
+  },
+  "nodes": [
+    {
+      "id": "gateway",
+      "name": "API Gateway",
+      "kind": "service",
+      "workerModel": "blocking",
+      "errorRate": 0,
+      "calls": [
+        {
+          "edgeId": "gateway-users",
+          "routes": ["/users"]
+        },
+        {
+          "edgeId": "gateway-orders",
+          "routes": ["/orders"]
+        }
+      ],
+      "workers": 40,
+      "queueLimit": 100,
+      "serviceTime": {
+        "type": "constant",
+        "ms": 2
+      }
+    },
+    {
+      "id": "user-service",
+      "name": "User Service",
+      "kind": "service",
+      "workerModel": "blocking",
+      "errorRate": 0,
+      "calls": [],
+      "workers": 50,
+      "queueLimit": 100,
+      "serviceTime": {
+        "type": "lognormal",
+        "p50Ms": 15,
+        "p99Ms": 60
+      }
+    },
+    {
+      "id": "order-service",
+      "name": "Order Service",
+      "kind": "service",
+      "workerModel": "blocking",
+      "errorRate": 0,
+      "calls": [
+        {
+          "edgeId": "order-payment"
+        }
+      ],
+      "workers": 200,
+      "queueLimit": 500,
+      "serviceTime": {
+        "type": "lognormal",
+        "p50Ms": 10,
+        "p99Ms": 40
+      }
+    },
+    {
+      "id": "payment-service",
+      "name": "Payment Service",
+      "kind": "service",
+      "workerModel": "blocking",
+      "errorRate": 0,
+      "calls": [],
+      "workers": 200,
+      "queueLimit": 500,
+      "serviceTime": {
+        "type": "lognormal",
+        "p50Ms": 30,
+        "p99Ms": 120
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "gateway-users",
+      "from": "gateway",
+      "to": "user-service",
+      "latency": {
+        "type": "constant",
+        "ms": 1
+      },
+      "packetLoss": 0,
+      "policies": {
+        "timeout": {
+          "valueMs": 2000
+        }
+      }
+    },
+    {
+      "id": "gateway-orders",
+      "from": "gateway",
+      "to": "order-service",
+      "latency": {
+        "type": "constant",
+        "ms": 1
+      },
+      "packetLoss": 0,
+      "policies": {
+        "timeout": {
+          "valueMs": 10000
+        },
+        "bulkhead": {
+          "value": 15
+        }
+      }
+    },
+    {
+      "id": "order-payment",
+      "from": "order-service",
+      "to": "payment-service",
+      "latency": {
+        "type": "constant",
+        "ms": 1
+      },
+      "packetLoss": 0,
+      "policies": {
+        "timeout": {
+          "valueMs": 10000
+        }
+      }
+    }
+  ],
+  "traffic": [
+    {
+      "id": "users",
+      "target": "gateway",
+      "route": "/users",
+      "pattern": {
+        "type": "poisson",
+        "rps": 60
+      }
+    },
+    {
+      "id": "orders",
+      "target": "gateway",
+      "route": "/orders",
+      "pattern": {
+        "type": "poisson",
+        "rps": 40
+      }
+    }
+  ],
+  "faults": [
+    {
+      "id": "payment-slow",
+      "startMs": 10000,
+      "durationMs": 30000,
+      "target": {
+        "node": "payment-service"
+      },
+      "effect": {
+        "type": "latency-add",
+        "add": {
+          "type": "constant",
+          "ms": 3000
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "name": "payment-slow-baseline",
+  "description": "External payment API gets 5s slower for 30s. Order->Payment: timeout 2s, 3 retries, no circuit breaker.",
+  "seed": 42,
+  "durationMs": 60000,
+  "metrics": { "bucketMs": 1000 },
+  "nodes": [
+    {
+      "id": "gateway",
+      "name": "API Gateway",
+      "kind": "service",
+      "workers": 200,
+      "queueLimit": 1000,
+      "workerModel": "blocking",
+      "serviceTime": { "type": "constant", "ms": 2 },
+      "errorRate": 0,
+      "calls": [{ "edgeId": "gateway-order" }]
+    },
+    {
+      "id": "order",
+      "name": "Order Service",
+      "kind": "service",
+      "workers": 100,
+      "queueLimit": 200,
+      "workerModel": "blocking",
+      "serviceTime": { "type": "lognormal", "p50Ms": 10, "p99Ms": 40 },
+      "errorRate": 0,
+      "calls": [{ "edgeId": "order-payment" }]
+    },
+    {
+      "id": "payment",
+      "name": "Payment Service",
+      "kind": "service",
+      "workers": 50,
+      "queueLimit": 100,
+      "workerModel": "blocking",
+      "serviceTime": { "type": "constant", "ms": 5 },
+      "errorRate": 0,
+      "calls": [{ "edgeId": "payment-external" }]
+    },
+    {
+      "id": "external-payment",
+      "name": "External Payment API",
+      "kind": "external-api",
+      "workers": 1000,
+      "queueLimit": 1000,
+      "workerModel": "blocking",
+      "serviceTime": { "type": "lognormal", "p50Ms": 120, "p99Ms": 400 },
+      "errorRate": 0,
+      "calls": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "gateway-order",
+      "from": "gateway",
+      "to": "order",
+      "latency": { "type": "constant", "ms": 1 },
+      "packetLoss": 0,
+      "policies": { "timeout": { "valueMs": 10000 } }
+    },
+    {
+      "id": "order-payment",
+      "from": "order",
+      "to": "payment",
+      "latency": { "type": "constant", "ms": 1 },
+      "packetLoss": 0,
+      "policies": {
+        "timeout": { "valueMs": 2000 },
+        "retry": { "maxRetries": 3, "delayMs": 100, "jitterMs": 50 }
+      }
+    },
+    {
+      "id": "payment-external",
+      "from": "payment",
+      "to": "external-payment",
+      "latency": { "type": "constant", "ms": 5 },
+      "packetLoss": 0,
+      "policies": { "timeout": { "valueMs": 30000 } }
+    }
+  ],
+  "traffic": [{ "id": "web", "target": "gateway", "pattern": { "type": "poisson", "rps": 100 } }],
+  "faults": [
+    {
+      "id": "external-slow",
+      "startMs": 10000,
+      "durationMs": 30000,
+      "target": { "node": "external-payment" },
+      "effect": { "type": "latency-add", "add": { "type": "constant", "ms": 5000 } }
+    }
+  ]
+}

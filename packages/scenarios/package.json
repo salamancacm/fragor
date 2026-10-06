@@ -1,0 +1,11 @@
+{
+  "name": "@fragor/scenarios",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "Canonical Fragor scenarios. Zod schemas, patches and findings arrive in M3.",
+  "type": "module",
+  "files": [
+    "examples"
+  ]
+}

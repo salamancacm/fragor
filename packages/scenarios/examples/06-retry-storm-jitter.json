@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "name": "retry-storm-jitter",
+  "description": "A burst of ~900 synchronized requests hits a small API; most are shed with 503 and retried after exactly 1s (jitterMs 0), so the burst repeats every second. Set jitterMs high (e.g. 500) to spread the retries.",
+  "seed": 3,
+  "durationMs": 15000,
+  "metrics": {
+    "bucketMs": 100
+  },
+  "nodes": [
+    {
+      "id": "clients",
+      "name": "Client fleet",
+      "kind": "service",
+      "workerModel": "blocking",
+      "errorRate": 0,
+      "calls": [
+        {
+          "edgeId": "clients-api"
+        }
+      ],
+      "workers": 5000,
+      "queueLimit": null,
+      "serviceTime": {
+        "type": "constant",
+        "ms": 0
+      }
+    },
+    {
+      "id": "api",
+      "name": "Inventory API",
+      "kind": "service",
+      "workerModel": "blocking",
+      "errorRate": 0,
+      "calls": [],
+      "workers": 8,
+      "queueLimit": 16,
+      "serviceTime": {
+        "type": "constant",
+        "ms": 20
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "clients-api",
+      "from": "clients",
+      "to": "api",
+      "latency": {
+        "type": "constant",
+        "ms": 1
+      },
+      "packetLoss": 0,
+      "policies": {
+        "timeout": {
+          "valueMs": 2000
+        },
+        "retry": {
+          "maxRetries": 4,
+          "delayMs": 1000,
+          "jitterMs": 0
+        }
+      }
+    }
+  ],
+  "traffic": [
+    {
+      "id": "steady",
+      "target": "clients",
+      "pattern": {
+        "type": "constant",
+        "rps": 50
+      }
+    },
+    {
+      "id": "burst",
+      "target": "clients",
+      "pattern": {
+        "type": "spike",
+        "baseRps": 0,
+        "peakRps": 3000,
+        "atMs": 5000,
+        "holdMs": 300
+      }
+    }
+  ],
+  "faults": []
+}

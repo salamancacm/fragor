@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "name": "traffic-spike-10x",
+  "description": "Traffic jumps 10x (60 -> 600 rps) for 10s. The API (about 450 rps of capacity) fills its finite queue and sheds load with 503s; latency degrades while the queue is full.",
+  "seed": 11,
+  "durationMs": 60000,
+  "metrics": {
+    "bucketMs": 1000
+  },
+  "nodes": [
+    {
+      "id": "gateway",
+      "name": "API Gateway",
+      "kind": "service",
+      "workerModel": "blocking",
+      "errorRate": 0,
+      "calls": [
+        {
+          "edgeId": "gateway-api"
+        }
+      ],
+      "workers": 400,
+      "queueLimit": 1000,
+      "serviceTime": {
+        "type": "constant",
+        "ms": 1
+      }
+    },
+    {
+      "id": "api",
+      "name": "Catalog API",
+      "kind": "service",
+      "workerModel": "blocking",
+      "errorRate": 0,
+      "calls": [],
+      "workers": 20,
+      "queueLimit": 50,
+      "serviceTime": {
+        "type": "lognormal",
+        "p50Ms": 40,
+        "p99Ms": 120
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "gateway-api",
+      "from": "gateway",
+      "to": "api",
+      "latency": {
+        "type": "constant",
+        "ms": 1
+      },
+      "packetLoss": 0,
+      "policies": {
+        "timeout": {
+          "valueMs": 1000
+        }
+      }
+    }
+  ],
+  "traffic": [
+    {
+      "id": "web",
+      "target": "gateway",
+      "pattern": {
+        "type": "spike",
+        "baseRps": 60,
+        "peakRps": 600,
+        "atMs": 20000,
+        "holdMs": 10000,
+        "rampMs": 1000
+      }
+    }
+  ],
+  "faults": []
+}
