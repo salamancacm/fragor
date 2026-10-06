@@ -15,7 +15,7 @@ numbers. All numbers shown anywhere in Fragor are computed by the engine from yo
 
 ## Status
 
-Early development. Current milestone: **M0 (foundations)**. The engine (`@fragor/engine`, pure
+Early development. Current milestone: **M1 (engine core)**. The engine (`@fragor/engine`, pure
 TypeScript, zero runtime dependencies) is built first; the UI comes later.
 
 | Milestone | Scope | Status |
@@ -28,7 +28,7 @@ TypeScript, zero runtime dependencies) is built first; the UI comes later.
 
 ## Development
 
-Requires Node >= 22 and pnpm.
+Requires pnpm. Node 24 is pinned per project: pnpm downloads it on install.
 
 ```bash
 pnpm install

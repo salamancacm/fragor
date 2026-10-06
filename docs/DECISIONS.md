@@ -6,13 +6,13 @@ Short ADR log. Newest at the bottom. Format: date, context, decision, alternativ
 
 | Tool | Version | Why |
 | --- | --- | --- |
-| Node (local) | v22.19.0 | `.nvmrc` = 22, `engines.node` >= 22 |
+| Node | 24.21.0 (LTS "Krypton") | pinned via `devEngines.runtime`; `.nvmrc` = 24, `engines.node` >= 24 |
 | pnpm | 10.18.3 | workspaces |
 | typescript | ^7.0.2 | strict typing (engine runs in browser and Node) |
 | @biomejs/biome | ^2.5.15 | single lint + format tool |
 | vitest | ^5.0.3 | tests and benchmarks |
 | fast-check | ^4.10.2 | property-based tests of engine invariants |
-| @types/node | ^22 | matches the Node 22 runtime; used only by tooling, not by the engine |
+| @types/node | ^24 | matches the Node 24 runtime; used only by tooling, not by the engine |
 
 Runtime dependencies of `@fragor/engine`: none (by design). Zod will be added only to
 `packages/scenarios` in M3, with justification then.
@@ -28,12 +28,22 @@ placeholders (rejected).
 
 ## 2026-10-06 — Engine consumed as TypeScript source
 Decision: `@fragor/engine` exports `./src/index.ts` directly; no build step yet, so tests and
-typecheck run without compiling. A build/bundling step will be added when the web app needs it.
-The root `build` script is therefore a no-op until a package defines one.
+typecheck run without compiling. A build step (and the CI `build` job) is added when a package
+needs one (CLI in M3, web in M4).
+
+## 2026-10-06 — Root scripts call tools directly (no nested `pnpm -r`)
+Context: on Windows, with the runtime pinned by `devEngines`, a `pnpm` invoked from inside a
+script fails (the globally installed pnpm launcher cannot start the project-local `node` shim).
+Decision: root scripts call tools directly: `vitest run` with `test.projects: ["packages/*"]` in
+`vitest.config.ts`, and `tsc -p <package>` per package for typecheck. Alternatives: `pnpm -r`
+(broken locally), a custom runner script (more code), dropping the Node pin (rejected).
 
 ## 2026-10-06 — Node version
-Decision: `.nvmrc` pinned to 22, the version verified locally. Newer LTS lines may be adopted
-later; CI reads `.nvmrc`. Open question for the author: move to the newest LTS?
+Context: the author asked for the current LTS (Node 24). The machine has Node 22 globally and no
+version manager. Decision: pin Node 24.21.0 with pnpm `devEngines.runtime` (`onFail: "download"`):
+pnpm downloads that runtime into the project and runs every script with it, without touching the
+global installation. `.nvmrc` = 24 for CI and other tools. Alternatives: install Node 24 globally or
+via nvm-windows (changes the machine), or keep 22 (not the active LTS).
 
 ## 2026-10-06 — Commit attribution disabled
 Decision: `.claude/settings.json` sets `attribution.commit` and `attribution.pr` to empty strings
