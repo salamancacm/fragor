@@ -1,3 +1,8 @@
 packages:
   - "packages/*"
   - "apps/*"
+
+# esbuild ships its binary as an optional platform package; its postinstall script is not
+# needed, so build scripts stay disabled (pnpm default) and this silences the warning.
+ignoredBuiltDependencies:
+  - esbuild

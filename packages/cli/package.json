@@ -1,0 +1,21 @@
+{
+  "name": "@fragor/cli",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "Fragor command line: run and compare scenarios.",
+  "type": "module",
+  "bin": {
+    "fragor": "./dist/fragor.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@fragor/engine": "workspace:*",
+    "@fragor/scenarios": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

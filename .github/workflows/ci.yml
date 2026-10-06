@@ -19,3 +19,6 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm build
+      - name: Smoke test the bundled CLI
+        run: node packages/cli/dist/fragor.mjs run packages/scenarios/examples/01-payment-slow-baseline.json

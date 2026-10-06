@@ -12,9 +12,12 @@
   "scripts": {
     "lint": "biome ci .",
     "format": "biome check --write .",
-    "typecheck": "tsc -p packages/engine && tsc -p packages/engine/test && tsc -p packages/scenarios && tsc -p packages/scenarios/test",
+    "typecheck": "tsc -p packages/engine && tsc -p packages/engine/test && tsc -p packages/scenarios && tsc -p packages/scenarios/test && tsc -p packages/cli",
     "test": "vitest run",
-    "bench": "vitest bench --run --silent=false"
+    "bench": "vitest bench --run --silent=false",
+    "build": "node packages/cli/build.mjs",
+    "fragor": "node packages/cli/dist/fragor.mjs",
+    "schema:update": "node packages/cli/dist/fragor.mjs schema --out packages/scenarios/schema/scenario.schema.json"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
