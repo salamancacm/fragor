@@ -14,7 +14,7 @@
     "format": "biome check --write .",
     "typecheck": "tsc -p packages/engine && tsc -p packages/engine/test",
     "test": "vitest run",
-    "bench": "vitest bench --run"
+    "bench": "vitest bench --run --silent=false"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
