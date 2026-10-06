@@ -2,8 +2,8 @@
 
 A scenario is a plain JSON document describing an architecture, its load and its faults.
 The TypeScript source of truth is `packages/engine/src/model/types.ts` (`Scenario`).
-Zod schemas with per-field descriptions and a generated JSON Schema arrive in M3
-(`packages/scenarios`); until then this page is the guide.
+The JSON Schema `packages/scenarios/schema/scenario.schema.json` documents every field (meaning
+and unit). Point your editor at it, or print it with `fragor schema`.
 
 ## Skeleton
 
@@ -54,6 +54,33 @@ mechanism; run them and compare (the engine computes every number, none are writ
 | `04-cascade-with-bulkhead.json` | Scenario 03 with a bulkhead on gateway -> order-service: /orders fails fast, /users stays healthy. |
 | `05-traffic-spike-10x.json` | A 10x traffic spike against a finite queue: load shedding with 503 and degraded latency. |
 | `06-retry-storm-jitter.json` | A synchronized burst retried with `jitterMs: 0`: retries arrive in waves every second. Set `jitterMs` to 500 to spread them. |
+
+## Validating and editing
+
+```ts
+import { applyPatch, parseScenario } from "@fragor/scenarios";
+
+const scenario = parseScenario(JSON.parse(text)); // throws with readable issues
+const faster = applyPatch(scenario, [
+  { op: "set", path: "edges.order-payment.policies.timeout.valueMs", value: 1500 },
+  { op: "unset", path: "edges.order-payment.policies.retry" },
+]);
+```
+
+Errors name items by id, e.g. `edges[order-payment].packetLoss: Too big: expected number to be <=1`.
+Unknown keys are errors, so typos do not pass silently.
+
+## From the command line
+
+```bash
+pnpm build
+node packages/cli/dist/fragor.mjs run packages/scenarios/examples/01-payment-slow-baseline.json
+node packages/cli/dist/fragor.mjs run packages/scenarios/examples/01-payment-slow-baseline.json --set edges.order-payment.policies.timeout.valueMs=1500
+node packages/cli/dist/fragor.mjs compare packages/scenarios/examples/01-payment-slow-baseline.json packages/scenarios/examples/02-payment-slow-with-breaker.json
+```
+
+`run` prints a summary and the findings; `--json` prints the full result and `--digest` the
+analysis digest. `compare` prints a before/after table.
 
 ## Writing your own
 

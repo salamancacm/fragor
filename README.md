@@ -15,7 +15,7 @@ numbers. All numbers shown anywhere in Fragor are computed by the engine from yo
 
 ## Status
 
-Early development. Current milestone: **M3 (scenarios and CLI)**, not started. The engine (`@fragor/engine`, pure
+Early development. Current milestone: **M4 (minimal web UI)**, not started. The engine (`@fragor/engine`, pure
 TypeScript, zero runtime dependencies) is built first; the UI comes later.
 
 | Milestone | Scope | Status |
@@ -23,7 +23,7 @@ TypeScript, zero runtime dependencies) is built first; the UI comes later.
 | M0 | Repo, tooling, CI, docs | done |
 | M1 | Engine core: heap, RNG, distributions, histogram, single-node service | done |
 | M2 | Resilience policies, faults, canonical scenarios | done |
-| M3 | Scenario schemas, patches, findings, CLI | planned |
+| M3 | Scenario schemas, patches, findings, CLI | done |
 | M4 | Minimal web UI | planned |
 
 ## What the engine models today
@@ -39,6 +39,20 @@ TypeScript, zero runtime dependencies) is built first; the UI comes later.
   versioned JSON with a determinism fingerprint.
 
 Canonical scenarios are described in [docs/SCENARIOS.md](docs/SCENARIOS.md).
+
+## Try it
+
+```bash
+pnpm install
+pnpm build
+node packages/cli/dist/fragor.mjs run packages/scenarios/examples/01-payment-slow-baseline.json
+node packages/cli/dist/fragor.mjs compare packages/scenarios/examples/01-payment-slow-baseline.json packages/scenarios/examples/02-payment-slow-with-breaker.json
+```
+
+The first command prints the outcome of a slow payment provider behind timeouts and retries,
+plus findings such as the cascade of saturated workers. The second shows what a circuit breaker
+with a fallback changes. What-if from the command line:
+`--set edges.order-payment.policies.timeout.valueMs=1500`.
 
 ## Development
 

@@ -4,8 +4,8 @@ Fragor is a monorepo. The engine is the product; every other package is a consum
 
 ```
 packages/engine     @fragor/engine     pure TS, zero runtime deps, no DOM, no Node APIs
-packages/scenarios  @fragor/scenarios  (M3) Zod schemas, examples, patches, findings, digest
-packages/cli        @fragor/cli        (M3) `fragor run|compare`
+packages/scenarios  @fragor/scenarios  Zod schemas, JSON Schema, patches, findings, digest, examples
+packages/cli        @fragor/cli        `fragor run|compare|schema` (bundled with esbuild)
 apps/web            Next.js UI         (M4) runs the engine in a Web Worker
 ```
 
@@ -159,6 +159,51 @@ any node kind. Outages are applied by `World.deliver` before the node sees the r
 node kinds get them for free; latency, error-rate and capacity faults are read by the behavior
 through `ctx.faults()`.
 
+## Scenarios package (`@fragor/scenarios`)
+
+```
+scenarios/src
+├─ schema.ts          Zod schemas, `satisfies z.ZodType<EngineType>`, `.describe()` on every field
+├─ references.ts      cross references, relations between numbers, call cycles
+├─ validate.ts        parseScenario / safeParseScenario with id-based error paths
+├─ json-schema.ts     scenarioJsonSchema() (draft 2020-12) -> schema/scenario.schema.json
+├─ patch.ts           applyPatch / parsePatch: typed, validated, non-mutating edits
+└─ analysis/
+   ├─ findings.ts     deriveFindings(scenario, result): rule-based, deterministic
+   ├─ rules-*.ts      one file per family of rules
+   └─ digest.ts       buildAnalysisDigest(scenario, result, findings)
+```
+
+## Analysis: findings and digest
+
+Findings are derived by rules from a scenario and the result the engine computed for it. They
+never compute new simulation data. Each has a stable id (`rule:target`), a severity, a summary
+built from computed numbers and evidence `{ nodeId | edgeId | traceId, fromMs, toMs, metric,
+value }` where `metric` names a field of the result.
+
+| Rule | Fires when | Severity |
+| --- | --- | --- |
+| worker-saturation | node utilization >= 0.95 for >= 2 s | critical if it also shed 503s or filled its queue |
+| cascade-propagation | a caller saturates at or after the dependency it calls (chain from an origin) | critical if the chain reaches an entry node |
+| retry-amplification | attempts / calls >= 1.5 on an edge with retry | by attempts that reached the dependency: >= 2.5 critical, >= 1.5 warning; info if most were rejected by breaker or bulkhead |
+| orphaned-work | a node finished work after its caller timed out | critical if >= 10% of its completed work |
+| missing-timeout | an edge has no timeout policy | warning if its p99 reached half the default timeout or it hit it |
+| single-point-of-failure | every traffic source needs the node through required calls with no fallback | warning if it failed or saturated in the run, else info |
+
+Thresholds are in `DEFAULT_THRESHOLDS` and can be overridden per call.
+
+The digest is a stable, compact JSON (about 2-7 kB for the canonical scenarios): disclaimer,
+summary, per-traffic outcomes, a timeline of fault and breaker events (capped), one line per
+node and edge, and the findings. It is what a report, the UI "Insights" panel or a future AI
+explainer consumes; the explainer cites its evidence instead of inventing numbers.
+
+## CLI (`@fragor/cli`)
+
+`main(argv, io)` parses arguments with `node:util` `parseArgs`, loads a scenario
+(`parseScenario`), applies `--set` / `--unset` / `--seed` as typed patches (`applyPatch`), runs
+`simulate`, and prints a summary with findings, the JSON result, the digest, or a before/after
+comparison (`compareResults`). `build.mjs` bundles it into `dist/fragor.mjs`.
+
 ## Serialization
 
 `Scenario` and `SimulationResult` are plain JSON: no classes, `Map`, `Set`, functions, `NaN` or
@@ -179,11 +224,15 @@ The design rules that keep it easy and safe to add later:
   such evidence needs: per-node utilization and queue depth per bucket, per-edge attempts,
   retries, timeouts and breaker state, fault and breaker events with times, root causes, and
   traces whose spans link each attempt, retry wait and fallback to its parent.
-- Deterministic findings (rules, no AI): retry-amplification, worker-saturation, orphaned-work,
-  cascade-propagation, missing-timeout, single-point-of-failure (M3), plus a stable
-  `buildAnalysisDigest(result, findings)` that fits in a few thousand tokens.
-- Edits go through pure `applyPatch(scenario, ops)` (set, add-node, remove-node, add-edge,
-  remove-edge); it returns a new scenario and never mutates.
+- Deterministic findings (rules, no AI) are implemented: `deriveFindings` and a stable
+  `buildAnalysisDigest(scenario, result, findings)` that fits in a few thousand tokens. A future
+  explainer receives the digest, never control over the engine.
+- Edits go through pure `applyPatch(scenario, ops)` (set, unset, add-node, remove-node, add-edge,
+  remove-edge); it returns a new, validated scenario and never mutates. Patches proposed from
+  outside are checked with `parsePatch` first.
+- The scenario JSON Schema (`schema/scenario.schema.json`) documents every field with meaning
+  and unit, so a model or a person can generate a valid scenario from it alone; the result is
+  still validated by `parseScenario`.
 - Privacy by default: no network or telemetry in engine, CLI or web unless the user opts in.
   A future provider interface will be provider-agnostic (local model or the user's own key),
   with no keys or vendors hard-coded.

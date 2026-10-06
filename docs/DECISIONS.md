@@ -157,3 +157,58 @@ Context: Vitest 5 replaced the top-level `bench()` with a `bench` fixture inside
 budget; they are not part of `pnpm test` nor CI (wall-clock timings are noisy on shared
 runners). Vitest reports that module export getters inflate timings (Vite transforms the
 engine's internal imports); measured numbers are therefore an upper bound.
+
+## 2026-10-06 — M3: dependency versions
+
+| Package | Dependency | Version | Why |
+| --- | --- | --- | --- |
+| @fragor/scenarios | zod | ^4.6.5 | user-facing validation with readable errors; `.exactOptional()` matches `exactOptionalPropertyTypes`; built-in `z.toJSONSchema` |
+| @fragor/cli | esbuild (dev) | ^0.28.2 | bundles the CLI and the workspace packages into one `dist/fragor.mjs` |
+
+Why a bundler: the engine is consumed as TypeScript source, uses constructor parameter
+properties (which Node type stripping cannot run) and extensionless relative imports. esbuild is
+a single, fast tool for that. Alternatives: `tsc` emit (needs import extensions rewritten
+everywhere), `tsx` at runtime (heavier, slower startup). Its postinstall script is not needed
+(the binary comes as an optional platform package), so it stays disabled
+(`ignoredBuiltDependencies` in pnpm-workspace.yaml).
+
+## 2026-10-06 — M3: schemas follow the engine types
+Decision: Zod schemas are declared `satisfies z.ZodType<T>` against `@fragor/engine` types
+(verified: a wrong field type or an extra field fails to compile). Objects are strict: unknown
+keys (typos) are errors. Field-level rules live in Zod; cross references and relations
+(ids, calls, cycles, maxMs >= minMs...) in `checkReferences`, attached with `superRefine`.
+Error paths name collection items by id: `edges[order-payment].policies.timeout.valueMs`.
+
+## 2026-10-06 — M3: JSON Schema is a committed, generated file
+Decision: `packages/scenarios/schema/scenario.schema.json` (draft 2020-12) is generated from the
+Zod schemas by `pnpm build && pnpm schema:update` and committed; a test fails when it is out of
+date. It is excluded from Biome formatting (generated). `$id` is a URN
+(`urn:fragor:schema:scenario:v1`) because the project owns no domain. Cross references cannot be
+expressed in JSON Schema; they are listed in its top-level description.
+
+## 2026-10-06 — M3: typed patches
+Decision: `applyPatch(scenario, ops)` is pure and validates its output. Ops: `set`, `unset`,
+`add-node`, `remove-node`, `add-edge` (optionally appending the call), `remove-edge`. `unset` was
+added to the list in the brief because turning a policy off (breaker on/off) means removing it.
+`remove-node` cascades to its edges, the calls to them and the faults on them, but refuses to
+remove a node that receives traffic. Paths address `nodes`, `edges`, `traffic`, `faults` items by
+id and other arrays by index; dotted paths require ids without dots (enforced by the schema).
+`parsePatch` validates untrusted patch documents.
+
+## 2026-10-06 — M3: findings are rules with thresholds, never free text
+Decision: six deterministic rules (see ARCHITECTURE, "Analysis"), each with severity, a summary
+built only from computed numbers, and evidence pointing at ids and time windows. Thresholds are
+explicit (`DEFAULT_THRESHOLDS`) and overridable. Retry amplification separates attempts that
+reached the dependency from attempts rejected by the breaker or bulkhead, so it does not claim
+load that never happened. Alternative: thresholds hidden in code (not explainable).
+
+## 2026-10-06 — M3: comparison lives in the engine
+Decision: `compareResults(before, after)` is in `@fragor/engine` (metrics/comparison.ts): pure,
+JSON output, shared by the CLI and the future UI. Verdicts depend on the better direction of each
+metric; context metrics (roots, circuit open, bulkhead full, fallbacks) have no verdict.
+
+## 2026-10-06 — M3: CLI without a parsing library
+Decision: `node:util` `parseArgs`; `main(argv, io)` returns an exit code and receives its side
+effects (stdout, stderr, files) so it is tested in-process. Exit codes: 0 ok, 1 runtime, 2 usage
+or invalid input. `run --json` prints the SimulationResult, `run --digest` the analysis digest,
+`compare --json` the comparison. CI builds the bundle and smoke-runs it.
