@@ -3,9 +3,21 @@
   "version": "0.0.0",
   "private": true,
   "license": "UNLICENSED",
-  "description": "Canonical Fragor scenarios. Zod schemas, patches and findings arrive in M3.",
+  "description": "Fragor scenario schemas (Zod), validation, typed patches, findings and analysis digest, plus canonical examples.",
   "type": "module",
   "files": [
-    "examples"
-  ]
+    "src",
+    "examples",
+    "schema"
+  ],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema/scenario.schema.json": "./schema/scenario.schema.json"
+  },
+  "dependencies": {
+    "@fragor/engine": "workspace:*",
+    "zod": "^4.6.5"
+  }
 }

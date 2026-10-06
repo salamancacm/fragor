@@ -1,0 +1,990 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1,
+      "description": "Scenario format version."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Scenario name."
+    },
+    "description": {
+      "type": "string",
+      "description": "What the scenario shows."
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991,
+      "description": "Random seed; same scenario + seed = same result."
+    },
+    "durationMs": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Traffic generation horizon, in milliseconds (> 0)."
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "cancelOnTimeout": {
+          "type": "boolean",
+          "description": "If true, a timed-out attempt cancels the server-side work; default false (work continues: orphaned work)."
+        },
+        "defaultEdgeTimeoutMs": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Attempt timeout for edges without a timeout policy; default 30000 (Quarkus REST Client read-timeout), in milliseconds (> 0)."
+        },
+        "drainMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Extra time after durationMs to finish in-flight work; default 60000, in milliseconds (>= 0)."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Simulation options."
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "bucketMs": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Width of each time-series bucket; default 1000, in milliseconds (> 0)."
+        }
+      },
+      "required": [
+        "bucketMs"
+      ],
+      "additionalProperties": false,
+      "description": "Metrics options."
+    },
+    "nodes": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the node. No dots or whitespace."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "service",
+              "external-api"
+            ],
+            "description": "Node kind."
+          },
+          "workers": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Concurrent requests the node can process."
+          },
+          "queueLimit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Max waiting requests; when full the node answers 503. null = unbounded."
+          },
+          "workerModel": {
+            "type": "string",
+            "enum": [
+              "blocking",
+              "async"
+            ],
+            "description": "blocking: a worker is held while waiting for dependencies (thread-per-request). async: released after its own service time."
+          },
+          "serviceTime": {
+            "description": "Own processing time per request, excluding dependencies.",
+            "$ref": "#/$defs/__schema0"
+          },
+          "errorRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Probability of answering 500 after the service time, a fraction in 0..1."
+          },
+          "calls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "edgeId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^.\\s]+$",
+                  "description": "Stable identifier of the edge to call. No dots or whitespace."
+                },
+                "probability": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Probability the call is made; default 1, a fraction in 0..1."
+                },
+                "routes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Only call when the request's route is one of these."
+                },
+                "required": {
+                  "type": "boolean",
+                  "description": "If false, a failure of this call does not fail the caller; default true."
+                }
+              },
+              "required": [
+                "edgeId"
+              ],
+              "additionalProperties": false,
+              "description": "A dependency call, made after the node's own service time."
+            },
+            "description": "Dependencies called in sequence, in this order."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "workers",
+          "queueLimit",
+          "workerModel",
+          "serviceTime",
+          "errorRate",
+          "calls"
+        ],
+        "additionalProperties": false,
+        "description": "A service or external API."
+      },
+      "description": "Services and external APIs."
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the edge. No dots or whitespace."
+          },
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the calling node. No dots or whitespace."
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the called node. No dots or whitespace."
+          },
+          "latency": {
+            "description": "One-way network latency, sampled for the request and the response separately.",
+            "$ref": "#/$defs/__schema0"
+          },
+          "packetLoss": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Probability that each leg is lost (only a timeout resolves it), a fraction in 0..1."
+          },
+          "policies": {
+            "type": "object",
+            "properties": {
+              "timeout": {
+                "type": "object",
+                "properties": {
+                  "valueMs": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Attempt timeout, in milliseconds (> 0)."
+                  }
+                },
+                "required": [
+                  "valueMs"
+                ],
+                "additionalProperties": false,
+                "description": "@Timeout: fail an attempt with `timeout` after valueMs."
+              },
+              "retry": {
+                "type": "object",
+                "properties": {
+                  "maxRetries": {
+                    "type": "integer",
+                    "minimum": -1,
+                    "maximum": 9007199254740991,
+                    "description": "Maximum retries after the first attempt; -1 = unlimited."
+                  },
+                  "delayMs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Delay before each retry, in milliseconds (>= 0)."
+                  },
+                  "jitterMs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Random jitter: the delay varies uniformly by +/- jitterMs (never below 0), in milliseconds (>= 0)."
+                  },
+                  "maxDurationMs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Stop retrying once this time has elapsed since the first attempt; default 180000, 0 = unlimited, in milliseconds (>= 0)."
+                  },
+                  "backoffFactor": {
+                    "type": "number",
+                    "minimum": 1,
+                    "description": "Exponential backoff factor (SmallRye @ExponentialBackoff): delay x factor^n."
+                  },
+                  "maxDelayMs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Cap for exponential backoff delays; default 60000, 0 = no cap, in milliseconds (>= 0)."
+                  },
+                  "retryOn": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "http-5xx",
+                        "timeout",
+                        "connection-refused",
+                        "circuit-open",
+                        "bulkhead-full"
+                      ],
+                      "description": "Failure kinds: http-5xx (500 or 503 load shedding), timeout, connection-refused (outage), circuit-open (breaker rejected), bulkhead-full (concurrency limit)."
+                    },
+                    "description": "Failure kinds that trigger a retry; default: all (including circuit-open)."
+                  },
+                  "abortOn": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "http-5xx",
+                        "timeout",
+                        "connection-refused",
+                        "circuit-open",
+                        "bulkhead-full"
+                      ],
+                      "description": "Failure kinds: http-5xx (500 or 503 load shedding), timeout, connection-refused (outage), circuit-open (breaker rejected), bulkhead-full (concurrency limit)."
+                    },
+                    "description": "Failure kinds that stop retrying; takes precedence over retryOn. Default: none."
+                  }
+                },
+                "required": [
+                  "maxRetries",
+                  "delayMs",
+                  "jitterMs"
+                ],
+                "additionalProperties": false,
+                "description": "@Retry."
+              },
+              "circuitBreaker": {
+                "type": "object",
+                "properties": {
+                  "requestVolumeThreshold": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991,
+                    "description": "Size of the rolling window of attempts."
+                  },
+                  "failureRatio": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Opens when failures / window >= failureRatio (window must be full), a fraction in 0..1."
+                  },
+                  "delayMs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Time spent open before moving to half-open, in milliseconds (>= 0)."
+                  },
+                  "successThreshold": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991,
+                    "description": "Probe attempts allowed in half-open; all must succeed to close."
+                  },
+                  "failOn": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "http-5xx",
+                        "timeout",
+                        "connection-refused",
+                        "circuit-open",
+                        "bulkhead-full"
+                      ],
+                      "description": "Failure kinds: http-5xx (500 or 503 load shedding), timeout, connection-refused (outage), circuit-open (breaker rejected), bulkhead-full (concurrency limit)."
+                    },
+                    "description": "Failure kinds counted as failures; default: all."
+                  }
+                },
+                "required": [
+                  "requestVolumeThreshold",
+                  "failureRatio",
+                  "delayMs",
+                  "successThreshold"
+                ],
+                "additionalProperties": false,
+                "description": "@CircuitBreaker, one per edge."
+              },
+              "bulkhead": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991,
+                    "description": "Maximum concurrent attempts on this edge."
+                  },
+                  "waitingTaskQueue": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Attempts allowed to wait for a slot (FIFO); default 0."
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false,
+                "description": "@Bulkhead: excess attempts fail with bulkhead-full."
+              },
+              "fallback": {
+                "type": "object",
+                "properties": {
+                  "countsAs": {
+                    "type": "string",
+                    "enum": [
+                      "degraded",
+                      "success"
+                    ],
+                    "description": "How a fallback answer is classified. Degraded answers are not goodput."
+                  },
+                  "latency": {
+                    "description": "Time the fallback takes to answer.",
+                    "$ref": "#/$defs/__schema0"
+                  }
+                },
+                "required": [
+                  "countsAs"
+                ],
+                "additionalProperties": false,
+                "description": "@Fallback: answers when everything inside it failed."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Client resilience policies of the caller on this edge (presence = enabled). Composition: Fallback(Retry(CircuitBreaker(Timeout(Bulkhead(attempt)))))."
+          }
+        },
+        "required": [
+          "id",
+          "from",
+          "to",
+          "latency",
+          "packetLoss",
+          "policies"
+        ],
+        "additionalProperties": false,
+        "description": "A network link from a caller to a dependency, with the caller's client policies."
+      },
+      "description": "Links between nodes."
+    },
+    "traffic": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the traffic source. No dots or whitespace."
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the entry node. No dots or whitespace."
+          },
+          "route": {
+            "type": "string",
+            "description": "Route of the requests (e.g. /orders), matched by CallSpec.routes."
+          },
+          "pattern": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "constant"
+                  },
+                  "rps": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Evenly spaced rate, in requests per second (>= 0)."
+                  }
+                },
+                "required": [
+                  "type",
+                  "rps"
+                ],
+                "additionalProperties": false,
+                "description": "Evenly spaced arrivals."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "poisson"
+                  },
+                  "rps": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Average rate, in requests per second (>= 0)."
+                  }
+                },
+                "required": [
+                  "type",
+                  "rps"
+                ],
+                "additionalProperties": false,
+                "description": "Random (Poisson) arrivals."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "ramp"
+                  },
+                  "fromRps": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Initial rate, in requests per second (>= 0)."
+                  },
+                  "toRps": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Final rate, in requests per second (>= 0)."
+                  },
+                  "durationMs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Duration of the ramp from the source's startMs, in milliseconds (>= 0)."
+                  }
+                },
+                "required": [
+                  "type",
+                  "fromRps",
+                  "toRps",
+                  "durationMs"
+                ],
+                "additionalProperties": false,
+                "description": "Poisson arrivals whose rate changes linearly, then stays at toRps."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "spike"
+                  },
+                  "baseRps": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Rate outside the spike, in requests per second (>= 0)."
+                  },
+                  "peakRps": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Rate at the peak, in requests per second (>= 0)."
+                  },
+                  "atMs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Start of the spike (absolute scenario time), in milliseconds (>= 0)."
+                  },
+                  "holdMs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Time at the peak, in milliseconds (>= 0)."
+                  },
+                  "rampMs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Ramp up and ramp down time; default 0, in milliseconds (>= 0)."
+                  }
+                },
+                "required": [
+                  "type",
+                  "baseRps",
+                  "peakRps",
+                  "atMs",
+                  "holdMs"
+                ],
+                "additionalProperties": false,
+                "description": "Poisson arrivals with a temporary spike."
+              }
+            ],
+            "description": "Arrival pattern."
+          },
+          "startMs": {
+            "type": "number",
+            "minimum": 0,
+            "description": "When the source starts; default 0, in milliseconds (>= 0)."
+          },
+          "endMs": {
+            "type": "number",
+            "minimum": 0,
+            "description": "When the source stops; default durationMs, in milliseconds (>= 0)."
+          }
+        },
+        "required": [
+          "id",
+          "target",
+          "pattern"
+        ],
+        "additionalProperties": false,
+        "description": "A source of root requests."
+      },
+      "description": "Traffic sources."
+    },
+    "faults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the fault. No dots or whitespace."
+          },
+          "startMs": {
+            "type": "number",
+            "minimum": 0,
+            "description": "When the fault starts, in milliseconds (>= 0)."
+          },
+          "durationMs": {
+            "type": "number",
+            "minimum": 0,
+            "description": "How long it lasts, in milliseconds (>= 0)."
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "node": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[^.\\s]+$",
+                    "description": "Stable identifier of the target node. No dots or whitespace."
+                  }
+                },
+                "required": [
+                  "node"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "edge": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[^.\\s]+$",
+                    "description": "Stable identifier of the target edge. No dots or whitespace."
+                  }
+                },
+                "required": [
+                  "edge"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "traffic": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[^.\\s]+$",
+                    "description": "Stable identifier of the target traffic source. No dots or whitespace."
+                  }
+                },
+                "required": [
+                  "traffic"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "description": "What the fault affects: exactly one of node, edge or traffic."
+          },
+          "effect": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "latency-add"
+                  },
+                  "add": {
+                    "$ref": "#/$defs/__schema0"
+                  }
+                },
+                "required": [
+                  "type",
+                  "add"
+                ],
+                "additionalProperties": false,
+                "description": "Node or edge: add this time (to service time or to each network leg)."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "latency-multiply"
+                  },
+                  "factor": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Multiplier (>= 0)."
+                  }
+                },
+                "required": [
+                  "type",
+                  "factor"
+                ],
+                "additionalProperties": false,
+                "description": "Node or edge: multiply latency."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "error-rate"
+                  },
+                  "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Replacement error rate, a fraction in 0..1."
+                  }
+                },
+                "required": [
+                  "type",
+                  "rate"
+                ],
+                "additionalProperties": false,
+                "description": "Node: override errorRate."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "outage"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "refuse",
+                      "blackhole"
+                    ],
+                    "description": "refuse: fail fast with connection-refused. blackhole: never answer."
+                  }
+                },
+                "required": [
+                  "type",
+                  "mode"
+                ],
+                "additionalProperties": false,
+                "description": "Node or edge: unavailable."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "capacity"
+                  },
+                  "workersFactor": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Multiplier of workers (>= 0); running work is not interrupted."
+                  }
+                },
+                "required": [
+                  "type",
+                  "workersFactor"
+                ],
+                "additionalProperties": false,
+                "description": "Node: lose capacity."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "packet-loss"
+                  },
+                  "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Additional loss per leg, a fraction in 0..1."
+                  }
+                },
+                "required": [
+                  "type",
+                  "rate"
+                ],
+                "additionalProperties": false,
+                "description": "Edge: extra packet loss."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "traffic-multiply"
+                  },
+                  "factor": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Rate multiplier (>= 0)."
+                  }
+                },
+                "required": [
+                  "type",
+                  "factor"
+                ],
+                "additionalProperties": false,
+                "description": "Traffic source: scale the rate."
+              }
+            ],
+            "description": "The effect while the fault is active."
+          }
+        },
+        "required": [
+          "id",
+          "startMs",
+          "durationMs",
+          "target",
+          "effect"
+        ],
+        "additionalProperties": false,
+        "description": "A time-boxed fault injected into the system."
+      },
+      "description": "Injected faults."
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "name",
+    "seed",
+    "durationMs",
+    "nodes",
+    "edges",
+    "traffic",
+    "faults"
+  ],
+  "additionalProperties": false,
+  "description": "A Fragor scenario: an architecture, its load and its faults. A simulation of it is not a prediction: results depend on the parameters you assume. Also required (checked by Fragor, not by JSON Schema): ids are unique per collection; edges, calls, traffic targets and fault targets reference existing ids; a call's edge starts at the calling node; calls form no cycle; uniform maxMs >= minMs; lognormal p99Ms >= p50Ms; with backoffFactor, delayMs < maxDelayMs.",
+  "$defs": {
+    "__schema0": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "constant"
+            },
+            "ms": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Fixed value, in milliseconds (>= 0)."
+            }
+          },
+          "required": [
+            "type",
+            "ms"
+          ],
+          "additionalProperties": false,
+          "description": "Always the same value."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "uniform"
+            },
+            "minMs": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Lower bound (inclusive), in milliseconds (>= 0)."
+            },
+            "maxMs": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Upper bound (exclusive); must be >= minMs, in milliseconds (>= 0)."
+            }
+          },
+          "required": [
+            "type",
+            "minMs",
+            "maxMs"
+          ],
+          "additionalProperties": false,
+          "description": "Uniform between minMs and maxMs."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "normal"
+            },
+            "meanMs": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Mean, in milliseconds (>= 0)."
+            },
+            "stdMs": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Standard deviation, in milliseconds (>= 0)."
+            }
+          },
+          "required": [
+            "type",
+            "meanMs",
+            "stdMs"
+          ],
+          "additionalProperties": false,
+          "description": "Normal distribution truncated at 0 (negative samples are redrawn)."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "lognormal"
+            },
+            "p50Ms": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Median, in milliseconds (> 0)."
+            },
+            "p99Ms": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "99th percentile; must be >= p50Ms, in milliseconds (> 0)."
+            }
+          },
+          "required": [
+            "type",
+            "p50Ms",
+            "p99Ms"
+          ],
+          "additionalProperties": false,
+          "description": "Lognormal defined by its median and p99 (mu = ln p50, sigma = (ln p99 - ln p50) / 2.3263). Typical for service latencies."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "exponential"
+            },
+            "meanMs": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Mean, in milliseconds (> 0)."
+            }
+          },
+          "required": [
+            "type",
+            "meanMs"
+          ],
+          "additionalProperties": false,
+          "description": "Exponential distribution."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "mixture"
+            },
+            "components": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "weight": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Relative weight (> 0); weights are normalized."
+                  },
+                  "dist": {
+                    "$ref": "#/$defs/__schema0"
+                  }
+                },
+                "required": [
+                  "weight",
+                  "dist"
+                ],
+                "additionalProperties": false
+              },
+              "description": "Components chosen with probability weight / sum(weights)."
+            }
+          },
+          "required": [
+            "type",
+            "components"
+          ],
+          "additionalProperties": false,
+          "description": "Mixture of distributions, e.g. 95% fast + 5% slow."
+        }
+      ],
+      "description": "A duration distribution in milliseconds."
+    }
+  },
+  "$id": "urn:fragor:schema:scenario:v1",
+  "title": "Fragor scenario"
+}

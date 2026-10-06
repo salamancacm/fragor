@@ -12,7 +12,7 @@
   "scripts": {
     "lint": "biome ci .",
     "format": "biome check --write .",
-    "typecheck": "tsc -p packages/engine && tsc -p packages/engine/test",
+    "typecheck": "tsc -p packages/engine && tsc -p packages/engine/test && tsc -p packages/scenarios && tsc -p packages/scenarios/test",
     "test": "vitest run",
     "bench": "vitest bench --run --silent=false"
   },
