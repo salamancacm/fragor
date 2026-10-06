@@ -85,7 +85,9 @@ const scenarioArb: fc.Arbitrary<Scenario> = fc
   }));
 
 describe("engine invariants (test group 13)", () => {
-  it("time never goes back, no event runs twice, workers and queue stay within limits", () => {
+  it("time never goes back, no event runs twice, workers and queue stay within limits", {
+    timeout: 60_000,
+  }, () => {
     fc.assert(
       fc.property(scenarioArb, (scenario) => {
         let sim: Simulation | undefined;

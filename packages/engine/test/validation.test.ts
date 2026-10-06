@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { createSimulation, simulate } from "../src";
-import { node, singleNode, traffic } from "./helpers";
+import { createSimulation, type Scenario, simulate } from "../src";
+import { chain, node, singleNode, traffic } from "./helpers";
+
+function withEdge(mutate: (s: Scenario) => void): Scenario {
+  const s = chain();
+  mutate(s);
+  return s;
+}
 
 describe("engine-level validation", () => {
   it("rejects broken references and invalid values with clear messages", () => {
-    const cases: [ReturnType<typeof singleNode>, RegExp][] = [
+    const cases: [Scenario, RegExp][] = [
       [singleNode({ traffic: [traffic("web", "nope", 1)] }), /unknown node "nope"/],
       [singleNode({ nodes: [node("svc"), node("svc")] }), /duplicate id "svc" in nodes/],
       [singleNode({ nodes: [node("svc", { workers: 0 })] }), /workers must be an integer >= 1/],
@@ -19,24 +25,102 @@ describe("engine-level validation", () => {
     for (const [scenario, message] of cases) expect(() => simulate(scenario)).toThrow(message);
   });
 
-  it("fails explicitly on features scheduled for M2", () => {
-    const withEdge = singleNode({
-      nodes: [node("svc"), node("b")],
-      edges: [
-        {
-          id: "a-b",
-          from: "a",
-          to: "b",
-          latency: { type: "constant", ms: 1 },
-          packetLoss: 0,
-          policies: {},
-        },
+  it("validates edges, calls and policies", () => {
+    const cases: [Scenario, RegExp][] = [
+      [
+        withEdge((s) => ((s.edges[0] as Scenario["edges"][0]).to = "x")),
+        /edges\[c-s\]\.to references unknown node "x"/,
       ],
+      [
+        withEdge((s) => ((s.edges[0] as Scenario["edges"][0]).packetLoss = 2)),
+        /packetLoss must be in \[0, 1\]/,
+      ],
+      [
+        withEdge((s) => ((s.nodes[0] as Scenario["nodes"][0]).calls = [{ edgeId: "zz" }])),
+        /calls\[0\]\.edgeId references unknown edge "zz"/,
+      ],
+      [
+        withEdge((s) => ((s.nodes[1] as Scenario["nodes"][0]).calls = [{ edgeId: "c-s" }])),
+        /edge "c-s" starts at "client", not at "server"/,
+      ],
+      [
+        withEdge((s) => {
+          (s.edges[0] as Scenario["edges"][0]).policies.retry = {
+            maxRetries: 1.5,
+            delayMs: 0,
+            jitterMs: 0,
+          };
+        }),
+        /retry\.maxRetries must be an integer >= 0/,
+      ],
+      [
+        withEdge((s) => {
+          (s.edges[0] as Scenario["edges"][0]).policies.circuitBreaker = {
+            requestVolumeThreshold: 0,
+            failureRatio: 0.5,
+            delayMs: 1,
+            successThreshold: 1,
+          };
+        }),
+        /requestVolumeThreshold must be an integer >= 1/,
+      ],
+      [
+        withEdge((s) => {
+          (s.edges[0] as Scenario["edges"][0]).policies.retry = {
+            maxRetries: 3,
+            delayMs: 100,
+            jitterMs: 0,
+            backoffFactor: 2,
+            maxDelayMs: 50,
+          };
+        }),
+        /delayMs \(100\) must be < maxDelayMs \(50\)/,
+      ],
+      [
+        withEdge((s) => {
+          s.faults = [
+            {
+              id: "f",
+              startMs: 0,
+              durationMs: 1,
+              target: { edge: "c-s" },
+              effect: { type: "capacity", workersFactor: 1 },
+            },
+          ];
+        }),
+        /effect "capacity" is not allowed for target kind "edge"/,
+      ],
+      [
+        withEdge((s) => {
+          s.faults = [
+            {
+              id: "f",
+              startMs: 0,
+              durationMs: 1,
+              target: { node: "nope" },
+              effect: { type: "error-rate", rate: 1 },
+            },
+          ];
+        }),
+        /target references unknown node "nope"/,
+      ],
+    ];
+    for (const [scenario, message] of cases) expect(() => simulate(scenario)).toThrow(message);
+  });
+
+  it("rejects call cycles", () => {
+    const s = withEdge((sc) => {
+      sc.edges.push({
+        id: "s-c",
+        from: "server",
+        to: "client",
+        latency: { type: "constant", ms: 1 },
+        packetLoss: 0,
+        policies: {},
+      });
+      (sc.nodes[1] as Scenario["nodes"][0]).calls = [{ edgeId: "s-c" }];
     });
-    expect(() => simulate(withEdge)).toThrow(/^not implemented: edges/);
-    expect(() =>
-      simulate(singleNode({ nodes: [node("svc", { calls: [{ edgeId: "x" }] })] })),
-    ).toThrow(/^not implemented: nodes\[svc\]\.calls/);
+    expect(() => simulate(s)).toThrow(/call cycle detected: client -> server -> client/);
   });
 
   it("snapshot reports live state while streaming", () => {
@@ -54,5 +138,28 @@ describe("engine-level validation", () => {
     expect(snap.nodes.svc?.queueDepth).toBeGreaterThan(0);
     sim.finish();
     expect(() => sim.runUntil(2000)).toThrow(/already finished/);
+  });
+
+  it("snapshot reports edge state", () => {
+    const sim = createSimulation(
+      chain({
+        server: { serviceTime: { type: "constant", ms: 500 } },
+        policies: {
+          bulkhead: { value: 2, waitingTaskQueue: 3 },
+          circuitBreaker: {
+            requestVolumeThreshold: 5,
+            failureRatio: 0.5,
+            delayMs: 100,
+            successThreshold: 1,
+          },
+        },
+      }),
+    );
+    sim.runUntil(450);
+    const edge = sim.snapshot().edges["c-s"];
+    expect(edge?.bulkheadRunning).toBe(2);
+    expect(edge?.bulkheadQueued).toBe(3);
+    expect(edge?.inFlight).toBe(5);
+    expect(edge?.breakerState).toBe("closed");
   });
 });

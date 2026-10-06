@@ -1,4 +1,4 @@
-import type { NodeSpec, Scenario, TrafficSpec } from "../src";
+import type { ClientPolicies, FaultSpec, NodeSpec, Scenario, TrafficSpec } from "../src";
 
 export function node(id: string, overrides: Partial<NodeSpec> = {}): NodeSpec {
   return {
@@ -31,6 +31,59 @@ export function singleNode(overrides: Partial<Scenario> = {}): Scenario {
     traffic: [traffic("web", "svc", 100)],
     faults: [],
     ...overrides,
+  };
+}
+
+export interface ChainOptions {
+  policies?: ClientPolicies;
+  server?: Partial<NodeSpec>;
+  client?: Partial<NodeSpec>;
+  rps?: number;
+  durationMs?: number;
+  faults?: FaultSpec[];
+  options?: Scenario["options"];
+  bucketMs?: number;
+}
+
+/**
+ * client -> server through edge "c-s" (1 ms constant latency each way). The client has huge
+ * capacity and no own service time, so root outcomes reflect the edge and the server.
+ */
+export function chain(o: ChainOptions = {}): Scenario {
+  return {
+    schemaVersion: 1,
+    name: "chain",
+    seed: 42,
+    durationMs: o.durationMs ?? 10_000,
+    ...(o.options === undefined ? {} : { options: o.options }),
+    metrics: { bucketMs: o.bucketMs ?? 1000 },
+    nodes: [
+      node("client", {
+        workers: 100_000,
+        queueLimit: null,
+        serviceTime: { type: "constant", ms: 0 },
+        calls: [{ edgeId: "c-s" }],
+        ...o.client,
+      }),
+      node("server", {
+        workers: 100_000,
+        queueLimit: null,
+        serviceTime: { type: "constant", ms: 10 },
+        ...o.server,
+      }),
+    ],
+    edges: [
+      {
+        id: "c-s",
+        from: "client",
+        to: "server",
+        latency: { type: "constant", ms: 1 },
+        packetLoss: 0,
+        policies: o.policies ?? {},
+      },
+    ],
+    traffic: [{ id: "web", target: "client", pattern: { type: "constant", rps: o.rps ?? 10 } }],
+    faults: o.faults ?? [],
   };
 }
 

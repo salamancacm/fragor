@@ -10,7 +10,11 @@ export type CounterField =
   | "timeouts"
   | "rejected503"
   | "orphanedResponses"
-  | "orphanedWork";
+  | "orphanedWork"
+  | "attempts"
+  | "circuitOpen"
+  | "bulkheadFull"
+  | "fallbacks";
 
 const COUNTER_FIELDS: readonly CounterField[] = [
   "arrivals",
@@ -22,6 +26,10 @@ const COUNTER_FIELDS: readonly CounterField[] = [
   "rejected503",
   "orphanedResponses",
   "orphanedWork",
+  "attempts",
+  "circuitOpen",
+  "bulkheadFull",
+  "fallbacks",
 ];
 
 export interface SeriesFeatures {
@@ -162,6 +170,10 @@ export class SeriesBuilder {
       rejected503: counter("rejected503"),
       orphanedResponses: counter("orphanedResponses"),
       orphanedWork: counter("orphanedWork"),
+      attempts: counter("attempts"),
+      circuitOpen: counter("circuitOpen"),
+      bulkheadFull: counter("bulkheadFull"),
+      fallbacks: counter("fallbacks"),
       queueDepthAvg: this.queue !== null ? this.queueAvg.slice(0, buckets) : null,
       queueDepthMax: this.queue !== null ? this.queueMax.slice(0, buckets) : null,
       utilization: this.busy !== null ? this.utilization.slice(0, buckets) : null,

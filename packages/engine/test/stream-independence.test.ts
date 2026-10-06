@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { simulate } from "../src";
+import { example } from "./examples";
 import { node, singleNode, traffic } from "./helpers";
 
 describe("stream independence (test group 2)", () => {
@@ -23,5 +24,19 @@ describe("stream independence (test group 2)", () => {
     });
     expect(after.series.nodes.svc).toEqual(before.series.nodes.svc);
     expect(after.summary.roots).toBeGreaterThan(before.summary.roots);
+  });
+});
+
+describe("stream independence with edges and policies (test group 2)", () => {
+  it("adding an unconnected node leaves every node and edge of scenario 01 unchanged", () => {
+    const base = example("01-payment-slow-baseline.json");
+    const before = simulate(base);
+    const after = simulate({ ...base, nodes: [...base.nodes, node("lonely")] });
+    for (const id of Object.keys(before.series.nodes)) {
+      expect(after.series.nodes[id]).toEqual(before.series.nodes[id]);
+    }
+    expect(after.series.edges).toEqual(before.series.edges);
+    expect(after.summary).toEqual(before.summary);
+    expect(after.traces).toEqual(before.traces);
   });
 });

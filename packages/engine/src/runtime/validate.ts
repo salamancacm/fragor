@@ -1,43 +1,43 @@
-import type { NodeSpec, Scenario } from "../model/types";
+import type { FaultSpec, NodeSpec, Scenario } from "../model/types";
+import { validateEdge, validateFault } from "./validate-parts";
 
 /**
- * Structural checks the engine needs to run safely. Full user-facing validation (Zod,
- * readable messages, cycle detection) lives in @fragor/scenarios (M3).
+ * Structural checks the engine needs to run safely, with messages naming the offending field.
+ * User-facing validation (Zod schemas, JSON Schema) lives in @fragor/scenarios (M3).
  */
 export function validateScenario(s: Scenario): void {
-  if (s.schemaVersion !== 1)
+  if (s.schemaVersion !== 1) {
     throw new Error(`unsupported schemaVersion ${String(s.schemaVersion)}`);
+  }
   if (!Number.isFinite(s.seed)) throw new Error(`seed must be a finite number, got ${s.seed}`);
   requirePositive("durationMs", s.durationMs);
   if (s.metrics !== undefined) requirePositive("metrics.bucketMs", s.metrics.bucketMs);
-  const drain = s.options?.drainMs;
-  if (drain !== undefined && (!Number.isFinite(drain) || drain < 0)) {
-    throw new Error(`options.drainMs must be >= 0, got ${drain}`);
+  const o = s.options ?? {};
+  if (o.drainMs !== undefined) requireNonNegative("options.drainMs", o.drainMs);
+  if (o.defaultEdgeTimeoutMs !== undefined) {
+    requirePositive("options.defaultEdgeTimeoutMs", o.defaultEdgeTimeoutMs);
   }
   unique("nodes", s.nodes);
   unique("edges", s.edges);
   unique("traffic", s.traffic);
   unique("faults", s.faults);
-  for (const n of s.nodes) validateNode(n);
   const nodeIds = new Set(s.nodes.map((n) => n.id));
+  const edges = new Map(s.edges.map((e) => [e.id, e]));
+  for (const n of s.nodes) validateNode(n);
+  for (const e of s.edges) validateEdge(e, nodeIds);
+  for (const n of s.nodes) validateCalls(n, edges);
   for (const t of s.traffic) {
     if (!nodeIds.has(t.target)) {
       throw new Error(`traffic[${t.id}].target references unknown node "${t.target}"`);
     }
   }
-  rejectUnimplemented(s);
-}
-
-/** Features specified in the brief but scheduled for M2. Fail loudly instead of ignoring. */
-function rejectUnimplemented(s: Scenario): void {
-  if (s.edges.length > 0) throw new Error("not implemented: edges and calls between nodes (M2)");
-  if (s.faults.length > 0) throw new Error("not implemented: faults (M2)");
-  for (const n of s.nodes) {
-    if (n.calls.length > 0) throw new Error(`not implemented: nodes[${n.id}].calls (M2)`);
-  }
-  if (s.options?.cancelOnTimeout === true) {
-    throw new Error("not implemented: options.cancelOnTimeout (M2)");
-  }
+  const ids = {
+    nodes: nodeIds,
+    edges: new Set(edges.keys()),
+    traffic: new Set(s.traffic.map((t) => t.id)),
+  };
+  for (const f of s.faults) validateFault(f as FaultSpec, ids);
+  rejectCallCycles(s);
 }
 
 function validateNode(n: NodeSpec): void {
@@ -47,16 +47,60 @@ function validateNode(n: NodeSpec): void {
   if (n.queueLimit !== null && (!Number.isInteger(n.queueLimit) || n.queueLimit < 0)) {
     throw new Error(`nodes[${n.id}].queueLimit must be null or an integer >= 0`);
   }
-  if (!(n.errorRate >= 0 && n.errorRate <= 1)) {
-    throw new Error(`nodes[${n.id}].errorRate must be in [0, 1], got ${n.errorRate}`);
-  }
+  requireFraction(`nodes[${n.id}].errorRate`, n.errorRate);
   if (n.kind !== "service" && n.kind !== "external-api") {
     throw new Error(`nodes[${n.id}].kind "${String(n.kind)}" is not supported`);
   }
+  if (n.workerModel !== "blocking" && n.workerModel !== "async") {
+    throw new Error(`nodes[${n.id}].workerModel must be "blocking" or "async"`);
+  }
 }
 
-function requirePositive(name: string, v: number): void {
+function validateCalls(n: NodeSpec, edges: Map<string, Scenario["edges"][number]>): void {
+  for (const [i, c] of n.calls.entries()) {
+    const path = `nodes[${n.id}].calls[${i}]`;
+    const edge = edges.get(c.edgeId);
+    if (edge === undefined) throw new Error(`${path}.edgeId references unknown edge "${c.edgeId}"`);
+    if (edge.from !== n.id) {
+      throw new Error(`${path}: edge "${c.edgeId}" starts at "${edge.from}", not at "${n.id}"`);
+    }
+    if (c.probability !== undefined) requireFraction(`${path}.probability`, c.probability);
+  }
+}
+
+/** Calls must form a DAG, otherwise a request could recurse forever. */
+function rejectCallCycles(s: Scenario): void {
+  const edgeTo = new Map(s.edges.map((e) => [e.id, e.to]));
+  const next = new Map(s.nodes.map((n) => [n.id, n.calls.map((c) => edgeTo.get(c.edgeId) ?? "")]));
+  const state = new Map<string, "visiting" | "done">();
+  const visit = (id: string, path: string[]): void => {
+    if (state.get(id) === "done") return;
+    if (state.get(id) === "visiting") {
+      throw new Error(`call cycle detected: ${[...path, id].join(" -> ")}`);
+    }
+    state.set(id, "visiting");
+    for (const to of next.get(id) ?? []) visit(to, [...path, id]);
+    state.set(id, "done");
+  };
+  for (const n of s.nodes) visit(n.id, []);
+}
+
+export function requirePositive(name: string, v: number): void {
   if (!Number.isFinite(v) || v <= 0) throw new Error(`${name} must be > 0, got ${v}`);
+}
+
+export function requireNonNegative(name: string, v: number): void {
+  if (!Number.isFinite(v) || v < 0) throw new Error(`${name} must be >= 0, got ${v}`);
+}
+
+export function requireFraction(name: string, v: number): void {
+  if (!(v >= 0 && v <= 1)) throw new Error(`${name} must be in [0, 1], got ${v}`);
+}
+
+export function requireInteger(name: string, v: number, min: number): void {
+  if (!Number.isInteger(v) || v < min) {
+    throw new Error(`${name} must be an integer >= ${min}, got ${v}`);
+  }
 }
 
 function unique(collection: string, items: readonly { id: string }[]): void {

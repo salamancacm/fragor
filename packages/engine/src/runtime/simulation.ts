@@ -1,43 +1,33 @@
 import { wallClockNow } from "../core/clock";
-import { createStream } from "../core/rng";
 import { MetricsCollector } from "../metrics/collector";
 import { buildSummary, computeFingerprint } from "../metrics/summary";
-import { openChildSpan, TraceSampler } from "../metrics/traces";
+import { TraceSampler } from "../metrics/traces";
 import type {
+  EdgeSnapshot,
   LiveSnapshot,
   Ms,
-  NodeKind,
   NodeSnapshot,
   Scenario,
   SimOptions,
   Simulation,
   SimulationResult,
-  TrafficSpec,
 } from "../model/types";
-import type { Job, NodeBehavior, NodeFactory } from "./node-behavior";
 import { RootTracker } from "./roots";
 import { Scheduler } from "./scheduler";
-import { createServiceNode } from "./service-node";
-import { TrafficSource } from "./traffic";
 import { validateScenario } from "./validate";
+import { World, type WorldEvents } from "./world";
 
 export const DEFAULT_BUCKET_MS = 1000;
 export const DEFAULT_DRAIN_MS = 60_000;
 export const DEFAULT_MAX_TRACES = 200;
 
-/** Registry of node behaviors. A new node kind is added here, nowhere else. */
-const NODE_FACTORIES: Record<NodeKind, NodeFactory> = {
-  service: createServiceNode,
-  "external-api": createServiceNode,
-};
-
 class SimulationRun implements Simulation {
   private readonly scheduler: Scheduler;
   private readonly metrics: MetricsCollector;
   private readonly roots: RootTracker;
-  private readonly nodes = new Map<string, NodeBehavior>();
+  private readonly world: World;
+  private readonly events: WorldEvents = { breakerTransitions: [], faults: [] };
   private readonly horizonMs: Ms;
-  private jobSeq = 0;
   private wallMs = 0;
   private result: SimulationResult | null = null;
 
@@ -50,23 +40,14 @@ class SimulationRun implements Simulation {
     this.metrics = new MetricsCollector(scenario.metrics?.bucketMs ?? DEFAULT_BUCKET_MS);
     this.scheduler = new Scheduler((t) => this.metrics.advanceTo(t), opts.onEvent);
     const sampler = new TraceSampler(scenario.seed, opts.maxTraces ?? DEFAULT_MAX_TRACES);
-    this.roots = new RootTracker(this.metrics.global, sampler);
+    this.roots = new RootTracker(
+      this.metrics.global,
+      sampler,
+      scenario.traffic.map((t) => t.id),
+    );
     this.scheduleTick(this.metrics.bucketMs);
-    for (const spec of scenario.nodes) {
-      const ctx = {
-        scheduler: this.scheduler,
-        series: this.metrics.addNode(spec.id),
-        stream: (purpose: string) => createStream(scenario.seed, "node", spec.id, purpose),
-      };
-      this.nodes.set(spec.id, NODE_FACTORIES[spec.kind](spec, ctx));
-    }
-    for (const spec of scenario.traffic) {
-      const rng = createStream(scenario.seed, "traffic", spec.id, "arrivals");
-      const source = new TrafficSource(spec, scenario.durationMs, this.scheduler, rng, (t) =>
-        this.onTrafficArrival(t),
-      );
-      source.start();
-    }
+    this.world = new World(scenario, this.scheduler, this.metrics, this.roots, this.events);
+    this.world.startTraffic();
   }
 
   get nowMs(): Ms {
@@ -82,7 +63,16 @@ class SimulationRun implements Simulation {
 
   snapshot(): LiveSnapshot {
     const nodes: Record<string, NodeSnapshot> = {};
-    for (const [id, node] of this.nodes) nodes[id] = node.snapshot();
+    for (const [id, node] of this.world.nodes) nodes[id] = node.snapshot();
+    const edges: Record<string, EdgeSnapshot> = {};
+    for (const [id, e] of this.world.edges) {
+      edges[id] = {
+        inFlight: e.inFlight,
+        breakerState: e.breaker?.state ?? null,
+        bulkheadRunning: e.bulkhead?.running ?? null,
+        bulkheadQueued: e.bulkhead?.queued ?? null,
+      };
+    }
     return {
       nowMs: this.scheduler.nowMs,
       roots: {
@@ -91,7 +81,7 @@ class SimulationRun implements Simulation {
         inFlight: this.roots.created - this.roots.completed,
       },
       nodes,
-      edges: {},
+      edges,
     };
   }
 
@@ -114,12 +104,16 @@ class SimulationRun implements Simulation {
           outcomes: this.roots.outcomeCounts(),
           reasons: this.roots.failureReasons(),
           latency: this.roots.latencyStats(),
+          byTraffic: this.roots.byTraffic(),
         },
         this.metrics,
         this.scenario.durationMs,
       ),
       series: { bucketMs: this.metrics.bucketMs, buckets, ...this.metrics.build(buckets) },
-      events: { breakerTransitions: [], faults: [] },
+      events: {
+        breakerTransitions: this.events.breakerTransitions.map((e) => ({ ...e })),
+        faults: this.events.faults.map((e) => ({ ...e })),
+      },
       traces: this.roots.traces(),
       stats: { eventsProcessed: this.scheduler.eventsProcessed, wallClockMs: 0 },
     };
@@ -130,25 +124,7 @@ class SimulationRun implements Simulation {
     return this.result;
   }
 
-  private onTrafficArrival(spec: TrafficSpec): void {
-    const now = this.scheduler.nowMs;
-    const root = this.roots.create(spec.id, spec.route ?? null, now);
-    const node = this.nodes.get(spec.target) as NodeBehavior;
-    const job: Job = {
-      id: this.jobSeq++,
-      root,
-      arrivedAtMs: now,
-      span: openChildSpan(root.span, "job", now, { nodeId: spec.target }),
-      reply: (result) => {
-        const at = this.scheduler.nowMs;
-        if (result.ok) this.roots.complete(root, at, "success", null);
-        else this.roots.complete(root, at, "failed", result.failure);
-      },
-    };
-    node.arrive(job);
-  }
-
-  /** Bucket boundaries are closed lazily by the kernel; ticks only keep series current while streaming. */
+  /** Bucket boundaries are closed lazily by the kernel; ticks keep series current while streaming. */
   private scheduleTick(atMs: Ms): void {
     if (atMs > this.horizonMs) return;
     this.scheduler.schedule(atMs, "METRICS_TICK", () => {

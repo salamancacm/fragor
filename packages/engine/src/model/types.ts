@@ -196,6 +196,7 @@ export type EventKind =
   | "RESPONSE_AT_CALLER"
   | "TIMEOUT_FIRED"
   | "RETRY_DUE"
+  | "FALLBACK_DONE"
   | "BREAKER_HALF_OPEN_DUE"
   | "FAULT_START"
   | "FAULT_END"
@@ -242,6 +243,14 @@ export interface Series {
   rejected503: number[];
   orphanedResponses: number[];
   orphanedWork: number[];
+  /** Attempts made (edges: first attempts + retries, including circuit-open rejections). */
+  attempts: number[];
+  /** Attempts rejected by an open or saturated half-open circuit breaker. */
+  circuitOpen: number[];
+  /** Attempts rejected by a full bulkhead. */
+  bulkheadFull: number[];
+  /** Invocations answered by a fallback. */
+  fallbacks: number[];
   queueDepthAvg: number[] | null;
   queueDepthMax: number[] | null;
   utilization: number[] | null;
@@ -261,6 +270,12 @@ export interface TraceSpan {
   endMs: Ms | null;
   outcome: RootOutcome;
   failure: FailureKind | null;
+  /** 0-based attempt index for "attempt" spans, null otherwise. */
+  attempt: number | null;
+  /** Job spans: the caller timed out but the work went on. Attempt spans: response arrived late. */
+  orphaned: boolean;
+  /** Work or attempt cancelled because of options.cancelOnTimeout. */
+  cancelled: boolean;
 }
 
 export interface SampledTrace {
@@ -295,6 +310,21 @@ export interface SimulationSummary {
   orphanedResponses: number;
   /** Successful roots per second of durationMs. */
   goodputRps: number;
+  circuitOpen: number;
+  bulkheadFull: number;
+  fallbacks: number;
+  /** Outcomes per traffic source id. */
+  byTraffic: Record<string, TrafficSummary>;
+}
+
+export interface TrafficSummary {
+  roots: number;
+  success: number;
+  degraded: number;
+  failed: number;
+  unfinished: number;
+  p50Ms: number | null;
+  p99Ms: number | null;
 }
 
 export interface SimulationResult {
@@ -332,8 +362,11 @@ export interface NodeSnapshot {
 }
 
 export interface EdgeSnapshot {
+  /** Attempts sent and not yet resolved (response or timeout) from the caller's view. */
   inFlight: number;
   breakerState: BreakerState | null;
+  bulkheadRunning: number | null;
+  bulkheadQueued: number | null;
 }
 
 export interface LiveSnapshot {

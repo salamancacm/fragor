@@ -8,6 +8,12 @@ import type {
   TraceSpanKind,
 } from "../model/types";
 
+export interface SpanIds {
+  nodeId?: string;
+  edgeId?: string;
+  attempt?: number;
+}
+
 /** Mutable trace under construction. Dropped traces keep accepting calls as no-ops. */
 export class TraceBuilder {
   dropped = false;
@@ -16,15 +22,9 @@ export class TraceBuilder {
   constructor(
     readonly rootKey: string,
     readonly rank: number,
-    readonly sortKey: number,
   ) {}
 
-  open(
-    kind: TraceSpanKind,
-    parent: SpanRef | null,
-    at: Ms,
-    ids: { nodeId?: string; edgeId?: string },
-  ): SpanRef | null {
+  open(kind: TraceSpanKind, parent: SpanRef | null, at: Ms, ids: SpanIds): SpanRef | null {
     if (this.dropped) return null;
     const span: TraceSpan = {
       spanId: `${this.rootKey}.${this.spans.length}`,
@@ -36,6 +36,9 @@ export class TraceBuilder {
       endMs: null,
       outcome: "unfinished",
       failure: null,
+      attempt: ids.attempt ?? null,
+      orphaned: false,
+      cancelled: false,
     };
     this.spans.push(span);
     return { trace: this, span };
@@ -63,11 +66,17 @@ export function closeSpan(
   ref.span.failure = failure;
 }
 
+/** Flags a span as orphaned or cancelled (no-op when the root is not sampled). */
+export function flagSpan(ref: SpanRef | null, flag: "orphaned" | "cancelled"): void {
+  if (ref === null || ref.trace.dropped) return;
+  ref.span[flag] = true;
+}
+
 export function openChildSpan(
   parent: SpanRef | null,
   kind: TraceSpanKind,
   at: Ms,
-  ids: { nodeId?: string; edgeId?: string },
+  ids: SpanIds,
 ): SpanRef | null {
   if (parent === null) return null;
   return parent.trace.open(kind, parent, at, ids);
@@ -92,7 +101,7 @@ export class TraceSampler {
   }
 
   /** Returns a builder if the root is (for now) in the sample, otherwise null. */
-  consider(rootKey: string, sortKey: number): TraceBuilder | null {
+  consider(rootKey: string): TraceBuilder | null {
     if (this.max === 0) return null;
     const rank = hashUnit(`${this.seed}\u0000trace\u0000${rootKey}`);
     if (this.kept.length >= this.max) {
@@ -101,16 +110,11 @@ export class TraceSampler {
       worst.dropped = true;
       this.kept.pop();
     }
-    const builder = new TraceBuilder(rootKey, rank, sortKey);
+    const builder = new TraceBuilder(rootKey, rank);
     let i = this.kept.length;
     while (i > 0 && (this.kept[i - 1] as TraceBuilder).rank > rank) i--;
     this.kept.splice(i, 0, builder);
     return builder;
-  }
-
-  /** Kept traces, ordered by root creation. */
-  keptInOrder(): TraceBuilder[] {
-    return [...this.kept].sort((a, b) => a.sortKey - b.sortKey);
   }
 }
 

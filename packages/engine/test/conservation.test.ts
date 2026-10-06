@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSimulation, type Scenario, type Simulation, simulate } from "../src";
+import { example } from "./examples";
 import { node, singleNode, traffic } from "./helpers";
 
 const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0);
@@ -59,5 +60,25 @@ describe("conservation (test group 3)", () => {
     expect(sum(svc.rejected503)).toBe(r.summary.rejected503);
     for (const arr of Object.values(svc))
       if (Array.isArray(arr)) expect(arr).toHaveLength(r.series.buckets);
+  });
+});
+
+describe("conservation across the call graph (test group 3)", () => {
+  for (const file of [
+    "01-payment-slow-baseline.json",
+    "02-payment-slow-with-breaker.json",
+    "03-cascade-blast-radius.json",
+  ]) {
+    it(`${file}: node arrivals = completed + queued + in service + waiting, at every event`, () => {
+      expect(checkEveryEvent(example(file))).toBeGreaterThan(10_000);
+    });
+  }
+
+  it("holds with async workers and cancelOnTimeout", () => {
+    const s = example("03-cascade-blast-radius.json");
+    for (const n of s.nodes) n.workerModel = "async";
+    s.options = { cancelOnTimeout: true };
+    for (const e of s.edges) e.policies.timeout = { valueMs: 1500 };
+    expect(checkEveryEvent(s)).toBeGreaterThan(10_000);
   });
 });

@@ -1,6 +1,6 @@
 import type { Rng } from "../core/rng";
 import type { Ms, TrafficPattern, TrafficSpec } from "../model/types";
-import type { Scheduler } from "./scheduler";
+import type { ScheduledEvent, Scheduler } from "./scheduler";
 
 /** A piece of the rate function: on [startMs, endMs) the rate never exceeds maxRps. */
 interface Segment {
@@ -104,52 +104,95 @@ export function validatePattern(id: string, pattern: TrafficPattern): void {
 }
 
 /**
- * Generates arrivals for one traffic source on [startMs, endMs).
+ * Generates arrivals for one traffic source on [startMs, min(endMs, durationMs)).
  * constant: evenly spaced, first arrival at startMs.
  * poisson, ramp, spike: (non-homogeneous) Poisson process sampled by thinning, using the
  * maximum rate of the current segment as the bound.
+ * A traffic-multiply fault scales the rate; when it changes, the pending arrival is redrawn
+ * from the current time (exact for Poisson processes, which are memoryless).
  */
 export class TrafficSource {
   private readonly startMs: Ms;
   private readonly endMs: Ms;
   private readonly model: ReturnType<typeof rateModel>;
-  private count = 0;
+  private pending: ScheduledEvent | null = null;
+  /** constant pattern: arrivals are anchor + k * interval since the last rate change. */
+  private anchorMs: Ms;
+  private k = 0;
+  private lastArrivalMs: Ms | null = null;
+  private factor: number;
 
   constructor(
     private readonly spec: TrafficSpec,
     durationMs: Ms,
     private readonly scheduler: Scheduler,
     private readonly rng: Rng,
+    private readonly rateFactor: () => number,
     private readonly onArrival: (spec: TrafficSpec) => void,
   ) {
     validatePattern(spec.id, spec.pattern);
     this.startMs = spec.startMs ?? 0;
     this.endMs = Math.min(spec.endMs ?? durationMs, durationMs);
     this.model = rateModel(spec.pattern, this.startMs);
+    this.anchorMs = this.startMs;
+    this.factor = rateFactor();
   }
 
   start(): void {
-    const first =
-      this.spec.pattern.type === "constant" ? this.constantAt(0) : this.nextPoisson(this.startMs);
-    this.scheduleAt(first);
+    this.scheduleNext(this.isConstant() ? this.constantNext() : this.nextPoisson(this.startMs));
   }
 
-  private scheduleAt(t: Ms | null): void {
+  /** Called when a traffic-multiply fault on this source starts or ends. */
+  onRateChanged(): void {
+    const now = this.scheduler.nowMs;
+    this.factor = this.rateFactor();
+    if (this.pending !== null) this.scheduler.cancel(this.pending);
+    this.pending = null;
+    if (now >= this.endMs) return;
+    if (this.isConstant()) {
+      // Re-anchor at the last arrival so the new interval applies from there; never in the past.
+      if (this.lastArrivalMs === null) {
+        this.anchorMs = Math.max(now, this.startMs);
+        this.k = 0;
+      } else {
+        this.anchorMs = this.lastArrivalMs;
+        this.k = 1;
+      }
+      const next = this.constantNext();
+      if (next !== null && next < now) {
+        this.anchorMs = now;
+        this.k = 0;
+      }
+      this.scheduleNext(this.constantNext());
+    } else {
+      this.scheduleNext(this.nextPoisson(Math.max(now, this.startMs)));
+    }
+  }
+
+  private isConstant(): boolean {
+    return this.spec.pattern.type === "constant";
+  }
+
+  private scheduleNext(t: Ms | null): void {
     if (t === null) return;
-    this.scheduler.schedule(t, "TRAFFIC_ARRIVAL", () => {
-      this.count++;
+    this.pending = this.scheduler.schedule(t, "TRAFFIC_ARRIVAL", () => {
+      this.pending = null;
+      this.lastArrivalMs = t;
       this.onArrival(this.spec);
-      this.scheduleAt(
-        this.spec.pattern.type === "constant" ? this.constantAt(this.count) : this.nextPoisson(t),
-      );
+      if (this.isConstant()) {
+        this.k++;
+        this.scheduleNext(this.constantNext());
+      } else {
+        this.scheduleNext(this.nextPoisson(t));
+      }
     });
   }
 
-  /** k-th arrival of a constant pattern; computed by multiplication to avoid drift. */
-  private constantAt(k: number): Ms | null {
-    const rps = this.model.rateAt(this.startMs);
+  /** Next arrival of a constant pattern; computed by multiplication to avoid drift. */
+  private constantNext(): Ms | null {
+    const rps = this.model.rateAt(this.startMs) * this.factor;
     if (rps <= 0) return null;
-    const t = this.startMs + (k * 1000) / rps;
+    const t = this.anchorMs + (this.k * 1000) / rps;
     return t < this.endMs ? t : null;
   }
 
@@ -158,17 +201,18 @@ export class TrafficSource {
     for (;;) {
       if (t >= this.endMs) return null;
       const seg = this.segmentAt(t);
-      if (seg.maxRps <= 0) {
+      const max = seg.maxRps * this.factor;
+      if (max <= 0) {
         t = seg.endMs;
         continue;
       }
-      const candidate = t - (1000 / seg.maxRps) * Math.log(this.rng.nextOpen());
+      const candidate = t - (1000 / max) * Math.log(this.rng.nextOpen());
       if (candidate >= seg.endMs) {
         t = seg.endMs;
         continue;
       }
       if (candidate >= this.endMs) return null;
-      if (this.rng.next() * seg.maxRps < this.model.rateAt(candidate)) return candidate;
+      if (this.rng.next() * max < this.model.rateAt(candidate) * this.factor) return candidate;
       t = candidate;
     }
   }
