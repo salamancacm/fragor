@@ -1,4 +1,13 @@
 export { SCENARIO_SCHEMA_ID, scenarioJsonSchema } from "./json-schema";
+export {
+  applyPatch,
+  PatchError,
+  type PatchOp,
+  type PatchPath,
+  parsePatch,
+  patchOpSchema,
+  splitPath,
+} from "./patch";
 export { findCallCycle } from "./references";
 export {
   callSchema,
