@@ -41,4 +41,29 @@ in 0..1. The same scenario and seed always produce the same result.
 - The call graph must not contain cycles.
 - Policy names mirror MicroProfile Fault Tolerance / SmallRye (see SEMANTICS.md).
 
-Canonical examples will live in `packages/scenarios/examples/` (M2).
+## Canonical examples
+
+`packages/scenarios/examples/` contains the scenarios used by the tests. Each one isolates a
+mechanism; run them and compare (the engine computes every number, none are written by hand).
+
+| File | Mechanism |
+| --- | --- |
+| `01-payment-slow-baseline.json` | An external API becomes 5 s slower for 30 s. Timeout 2 s + 3 retries, no breaker: retries amplify load, workers saturate, the slowness cascades up to the gateway. |
+| `02-payment-slow-with-breaker.json` | Same fault with a circuit breaker and a degraded fallback: the breaker opens, fails fast and the gateway is protected; results become degraded instead of failed. |
+| `03-cascade-blast-radius.json` | A blocking gateway serves /users and /orders; /orders depends on a slow payment service. Gateway workers pile up and /users fails too. |
+| `04-cascade-with-bulkhead.json` | Scenario 03 with a bulkhead on gateway -> order-service: /orders fails fast, /users stays healthy. |
+| `05-traffic-spike-10x.json` | A 10x traffic spike against a finite queue: load shedding with 503 and degraded latency. |
+| `06-retry-storm-jitter.json` | A synchronized burst retried with `jitterMs: 0`: retries arrive in waves every second. Set `jitterMs` to 500 to spread them. |
+
+## Writing your own
+
+1. Start from the skeleton and add nodes; keep `workers`, `queueLimit` and `serviceTime`
+   realistic for what you want to learn, not exact.
+2. Add edges for each dependency and reference them from the caller's `calls`, in the order the
+   calls happen. Use `routes` on a call and `route` on a traffic source to model endpoints.
+3. Add policies one at a time and compare runs: the difference is the lesson.
+4. Add faults with a start and a duration so you see before, during and after.
+5. Use a smaller `metrics.bucketMs` (e.g. 100) to see bursts, a larger one for long runs.
+
+Remember: a simulation is not a prediction. It shows how a mechanism behaves under the
+parameters you assumed.

@@ -29,13 +29,22 @@ engine/src
 ├─ model/types.ts       source of truth for every input/output type
 ├─ runtime/
 │  ├─ scheduler.ts      the event kernel: virtual clock, schedule/cancel, runUntil
-│  ├─ node-behavior.ts  Job, NodeContext, NodeBehavior: the node extension point
-│  ├─ service-node.ts   workers + FIFO queue + 503 + serviceTime + errorRate
+│  ├─ node-behavior.ts  Job, JobResult, NodeContext, NodeBehavior: the node extension point
+│  ├─ service-node.ts   workers, FIFO queue, 503, serviceTime, errorRate, calls, blocking/async
+│  ├─ call-pipeline.ts  Invocation: Fallback(Retry(CircuitBreaker(Timeout(Bulkhead(attempt)))))
+│  ├─ network.ts        per-edge links: leg latency and packet loss; EdgeRuntime
+│  ├─ faults.ts         FaultRegistry: FAULT_START/END and combined effects per target
 │  ├─ traffic.ts        constant / poisson / ramp / spike arrival generators
-│  ├─ roots.ts          root requests: creation, final outcome, end-to-end latency
-│  ├─ validate.ts       engine-level structural checks
-│  └─ simulation.ts     wires everything; createSimulation() / simulate()
-├─ policies/            (M2) timeout, retry, circuit-breaker, bulkhead, fallback
+│  ├─ roots.ts          root requests: creation, final outcome, latency, per-traffic totals
+│  ├─ world.ts          builds and wires nodes, edges, faults and traffic for one run
+│  ├─ validate*.ts      engine-level structural checks (references, cycles, parameters)
+│  └─ simulation.ts     createSimulation() / simulate(): run loop, snapshot, result
+├─ policies/            client policies, independent of nodes and of the kernel
+│  ├─ timeout.ts        attempt deadline (default 30 000 ms)
+│  ├─ retry.ts          retryOn/abortOn, maxRetries, maxDuration, delay/backoff/jitter
+│  ├─ circuit-breaker.ts CLOSED/OPEN/HALF_OPEN with generations
+│  ├─ bulkhead.ts       semaphore + optional FIFO waiting queue
+│  └─ fallback.ts       degraded/success answer with optional latency
 ├─ metrics/
 │  ├─ series-builder.ts per-entity bucket series (counters, percentiles, time-weighted gauges)
 │  ├─ collector.ts      bucket clock shared by every series
@@ -57,16 +66,24 @@ the heap and is skipped when popped. Before firing an event the kernel calls
 `metrics.advanceTo(t)`, which closes every bucket that ended at or before `t`.
 
 ```
-TRAFFIC_ARRIVAL   source fires -> RootTracker.create -> Job at the entry node -> node.arrive(job)
-                  -> source schedules its next arrival (one pending arrival per source)
-node.arrive       free worker? start : queue has room? enqueue : reply 503 (http-5xx)
-start             busy++, sample serviceTime -> schedule SERVICE_DONE
-SERVICE_DONE      draw error (always) -> release worker -> reply 200/500 -> start next queued job
-job.reply         roots: RootTracker.complete (success | failed + reason)
-                  M2: attempts schedule RESPONSE_AT_CALLER after the return network leg
-METRICS_TICK      every bucketMs while traffic is scheduled or work is pending
-(M2) ARRIVE_AT_NODE, RESPONSE_AT_CALLER, TIMEOUT_FIRED, RETRY_DUE, BREAKER_HALF_OPEN_DUE,
-     FAULT_START, FAULT_END
+TRAFFIC_ARRIVAL       source fires -> RootTracker.create -> world.deliver(entry node)
+                      (node outage: refuse -> connection-refused; blackhole -> no answer)
+node.arrive           free worker? start : queue has room? enqueue : reply 503 (http-5xx)
+SERVICE_DONE          error draw -> 500, or run calls in sequence (async: release worker first)
+  call                ctx.invoke(edge) -> Invocation:
+                        breaker.tryAcquire()      rejected -> circuit-open (no network)
+                        schedule TIMEOUT_FIRED    (before the bulkhead)
+                        bulkhead.enter()          rejected -> bulkhead-full / queued
+                        request leg               lost -> only the timeout resolves it
+ARRIVE_AT_NODE        world.deliver(target) -> node.arrive(job)
+job.reply             response leg (may be lost) -> RESPONSE_AT_CALLER
+RESPONSE_AT_CALLER    attempt already timed out? orphanedResponses : resolve attempt
+TIMEOUT_FIRED         attempt fails with timeout; server job marked orphaned (or cancelled)
+resolve attempt       breaker.record -> retry? RETRY_DUE : fallback? FALLBACK_DONE : done
+BREAKER_HALF_OPEN_DUE OPEN -> HALF_OPEN after delayMs
+FAULT_START/END       FaultRegistry updates combined effects and notifies subscribers
+                      (nodes: capacity; traffic sources: rate)
+METRICS_TICK          every bucketMs while traffic is scheduled or work is pending
 ```
 
 The run ends at `durationMs + drainMs` (the horizon) or earlier when no work is pending.
@@ -105,31 +122,42 @@ factory and registering it; the kernel, traffic, metrics and client policies are
 ```ts
 interface Job {                       // one request that reached a node
   readonly id: number;
+  readonly nodeId: string;
   readonly root: RootRequest;         // inherited rootId and route
   readonly arrivedAtMs: Ms;
   readonly reply: (r: JobResult) => void;  // call exactly once, when the response leaves
-  span: SpanRef | null;               // trace span (null when not sampled)
+  readonly span: SpanRef | null;      // trace span (null when not sampled)
+  orphaned: boolean;                  // the caller timed out; work goes on
+  cancelled: boolean;                 // the caller cancelled it
 }
-type JobResult = { ok: true } | { ok: false; failure: FailureKind };
+type JobResult =
+  | { ok: true; degraded: boolean }
+  | { ok: false; failure: FailureKind; cause: FailureKind };  // cause = root cause
 
 interface NodeContext {               // services available to a behavior
   readonly scheduler: Scheduler;      // nowMs, schedule(at, kind, fire), cancel(event)
   readonly series: SeriesBuilder;     // this node's metrics
+  readonly global: SeriesBuilder;     // global series (shared counters)
   stream(purpose: string): Rng;       // independent RNG sub-stream of this node
-  // M2: invoke(edgeId, parentJob, done) to call a dependency through the client policies
+  faults(): NodeEffects;              // combined effect of active faults on this node
+  invoke(edgeId, parent, done): InvocationHandle;  // call a dependency through the client policies
 }
 
 interface NodeBehavior {
   readonly spec: NodeSpec;
   arrive(job: Job): void;             // admission, processing and reply are up to the node
+  cancel(job: Job): void;             // caller cancelled (cancelOnTimeout); must not reply
+  onFaultsChanged(): void;            // capacity / latency / error faults changed
   snapshot(): NodeSnapshot;
 }
 type NodeFactory = (spec: NodeSpec, ctx: NodeContext) => NodeBehavior;
 ```
 
 The caller side never looks inside a node: it only creates a `Job` with a `reply` callback.
-That is what lets the M2 call pipeline (network, timeout, retry, breaker, bulkhead, fallback)
-wrap any node kind.
+That is what lets the call pipeline (network, timeout, retry, breaker, bulkhead, fallback) wrap
+any node kind. Outages are applied by `World.deliver` before the node sees the request, so new
+node kinds get them for free; latency, error-rate and capacity faults are read by the behavior
+through `ctx.faults()`.
 
 ## Serialization
 
@@ -147,7 +175,10 @@ The design rules that keep it easy and safe to add later:
 - Package boundary: `packages/ai` (future) depends on `engine`, never the reverse. `engine`
   imports nothing AI-related and makes no network calls. The package is not created until needed.
 - Stable IDs for nodes, edges, faults and traces; every finding references evidence as
-  `{ nodeId | edgeId | traceId, fromMs, toMs, metric }`.
+  `{ nodeId | edgeId | traceId, fromMs, toMs, metric }`. The M2 result already carries what
+  such evidence needs: per-node utilization and queue depth per bucket, per-edge attempts,
+  retries, timeouts and breaker state, fault and breaker events with times, root causes, and
+  traces whose spans link each attempt, retry wait and fallback to its parent.
 - Deterministic findings (rules, no AI): retry-amplification, worker-saturation, orphaned-work,
   cascade-propagation, missing-timeout, single-point-of-failure (M3), plus a stable
   `buildAnalysisDigest(result, findings)` that fits in a few thousand tokens.

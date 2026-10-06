@@ -106,3 +106,54 @@ Decision: `ramp.durationMs` is relative to the source's `startMs`; `spike.atMs` 
 scenario time, and the spike ramps down over the same `rampMs` it ramped up. Both are
 non-homogeneous Poisson processes (thinning). `constant` is evenly spaced, first arrival at
 `startMs`.
+
+## 2026-10-06 — M2: semantics verified against SmallRye 6.11.4 source, not only docs
+Context: the MicroProfile spec leaves details open (half-open concurrency, window reset, backoff
+clamping, when maxDuration is checked). Decision: follow SmallRye Fault Tolerance 6.11.4 (the
+implementation used by Quarkus), reading its source where the docs are silent; cite both in
+SEMANTICS.md. The latest SmallRye release is 7.0.0, but its documentation was not published at
+the time of writing, so 6.11.4 is the reference. Alternative: spec-only semantics (ambiguous).
+
+## 2026-10-06 — M2: failure kind vs root cause
+Decision: a caller's policies see a failed dependency of its callee as `http-5xx` (the callee
+answers 500), while `summary.failureReasons` counts the root cause carried through 500 responses.
+Why: policies must react to what the caller really observes, and the explanation of a failure
+needs the origin (e.g. timeouts on a deep edge). Alternative: report only what the root sees
+(everything would be http-5xx), or propagate the inner kind to policies (wrong retry decisions).
+
+## 2026-10-06 — M2: bulkhead slot released when the caller stops waiting
+Decision: semaphore semantics; the slot is released on response, timeout or cancellation.
+`waitingTaskQueue` is honored whenever configured. Alternative: MicroProfile's @Asynchronous
+variant where a timed-out execution keeps its slot until it returns (needs modeling the caller's
+sync/async style; not in scope).
+
+## 2026-10-06 — M2: cancelOnTimeout semantics
+Decision: queued work is dropped; own service time cannot be interrupted but no calls follow;
+work waiting on dependencies cancels them recursively and frees its worker immediately; requests
+still on the wire are dropped on arrival. A cancelled half-open probe frees its slot (UNVERIFIED,
+no SmallRye equivalent).
+
+## 2026-10-06 — M2: summary additions
+Added `summary.byTraffic` (outcomes and p50/p99 per traffic source; needed to show the blast
+radius on /users), `summary.circuitOpen`, `summary.bulkheadFull`, `summary.fallbacks`, and the
+per-bucket series `attempts`, `circuitOpen`, `bulkheadFull`, `fallbacks`. Trace spans gained
+`attempt`, `orphaned` and `cancelled`. EdgeSnapshot gained bulkhead state. New event kind
+FALLBACK_DONE for fallback latency.
+
+## 2026-10-06 — M2: fault effects per target and combination rules
+Decision: node: latency-add, latency-multiply, error-rate, outage, capacity; edge: latency-add,
+latency-multiply, packet-loss, outage; traffic: traffic-multiply. Overlaps: sums for latency-add,
+products for multiplicative effects, last started wins for error-rate, blackhole wins over refuse,
+independent losses for packet-loss. Capacity drops never preempt running work.
+
+## 2026-10-06 — M2: canonical scenarios live in @fragor/scenarios without Zod yet
+Decision: `packages/scenarios` is created now with `examples/*.json` only (no dependencies, no
+code). Zod schemas, JSON Schema export, applyPatch and findings arrive in M3. Engine tests read the
+JSON files directly and rely on the engine's structural validation.
+
+## 2026-10-06 — M2: benchmarks with the Vitest 5 bench fixture
+Context: Vitest 5 replaced the top-level `bench()` with a `bench` fixture inside `test()` in
+`*.bench.ts` files, run by `vitest bench`. Decision: `pnpm bench` runs them and asserts the
+budget; they are not part of `pnpm test` nor CI (wall-clock timings are noisy on shared
+runners). Vitest reports that module export getters inflate timings (Vite transforms the
+engine's internal imports); measured numbers are therefore an upper bound.
