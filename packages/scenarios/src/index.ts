@@ -1,3 +1,15 @@
+export { type AnalysisDigest, buildAnalysisDigest, DIGEST_DISCLAIMER } from "./analysis/digest";
+export { deriveFindings } from "./analysis/findings";
+export { requiredNodes } from "./analysis/rules-graph";
+export {
+  DEFAULT_THRESHOLDS,
+  type Evidence,
+  type EvidenceTarget,
+  type Finding,
+  type FindingRule,
+  type FindingThresholds,
+  type Severity,
+} from "./analysis/types";
 export { SCENARIO_SCHEMA_ID, scenarioJsonSchema } from "./json-schema";
 export {
   applyPatch,
