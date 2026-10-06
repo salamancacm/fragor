@@ -15,13 +15,13 @@ numbers. All numbers shown anywhere in Fragor are computed by the engine from yo
 
 ## Status
 
-Early development. Current milestone: **M1 (engine core)**. The engine (`@fragor/engine`, pure
+Early development. Current milestone: **M2 (resilience and faults)**. The engine (`@fragor/engine`, pure
 TypeScript, zero runtime dependencies) is built first; the UI comes later.
 
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | M0 | Repo, tooling, CI, docs | done |
-| M1 | Engine core: heap, RNG, distributions, histogram, single-node service | pending |
+| M1 | Engine core: heap, RNG, distributions, histogram, single-node service | done |
 | M2 | Resilience policies, faults, canonical scenarios | pending |
 | M3 | Scenario schemas, patches, findings, CLI | planned |
 | M4 | Minimal web UI | planned |

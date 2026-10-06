@@ -14,36 +14,77 @@ Dependency direction: `web`, `cli`, `scenarios` -> `engine`. Never the reverse.
 The types in `packages/engine/src/model/types.ts` are the source of truth; Zod schemas are
 declared `satisfies z.ZodType<Scenario>` so the compiler detects divergence.
 
-## Engine modules (planned layout)
+## Engine modules
 
 ```
 engine/src
-├─ core/      event-queue (binary heap), rng (seeded sub-streams), distributions, histogram, ids
-├─ model/     types.ts — Scenario, NodeSpec, EdgeSpec, policies, results
-├─ runtime/   simulation, service-node, call-pipeline, network, traffic, faults
-├─ policies/  timeout, retry, circuit-breaker, bulkhead, fallback
-├─ metrics/   collector, summary, comparison
-└─ index.ts   public API: simulate(), createSimulation()
+├─ core/        pure building blocks, no simulation knowledge
+│  ├─ event-queue.ts    binary min-heap ordered by (timeMs, seq)
+│  ├─ rng.ts            sfc32 PRNG; createStream(seed, ...path) derives independent sub-streams
+│  ├─ hash.ts           cyrb128 string hash (stream seeds, trace sampling, fingerprint)
+│  ├─ distributions.ts  compileDist(): validates a Dist and returns a sampler
+│  ├─ histogram.ts      log-linear histogram (integer ns, 128 sub-buckets per octave)
+│  ├─ fifo.ts           O(1) FIFO queue
+│  └─ clock.ts          the only wall-clock access (stats.wallClockMs)
+├─ model/types.ts       source of truth for every input/output type
+├─ runtime/
+│  ├─ scheduler.ts      the event kernel: virtual clock, schedule/cancel, runUntil
+│  ├─ node-behavior.ts  Job, NodeContext, NodeBehavior: the node extension point
+│  ├─ service-node.ts   workers + FIFO queue + 503 + serviceTime + errorRate
+│  ├─ traffic.ts        constant / poisson / ramp / spike arrival generators
+│  ├─ roots.ts          root requests: creation, final outcome, end-to-end latency
+│  ├─ validate.ts       engine-level structural checks
+│  └─ simulation.ts     wires everything; createSimulation() / simulate()
+├─ policies/            (M2) timeout, retry, circuit-breaker, bulkhead, fallback
+├─ metrics/
+│  ├─ series-builder.ts per-entity bucket series (counters, percentiles, time-weighted gauges)
+│  ├─ collector.ts      bucket clock shared by every series
+│  ├─ traces.ts         deterministic bottom-k trace sampling and span trees
+│  └─ summary.ts        summary and fingerprint
+└─ index.ts             public API
 ```
 
 ## Event flow
 
-Virtual time only; the engine never reads the wall clock inside simulation logic.
-The queue is a binary heap ordered by `(timeMs, seq)`; `seq` is a monotonic counter that breaks
-ties deterministically.
+Virtual time only; the engine never reads the wall clock inside simulation logic (a test
+scans `src/` for `Math.random`, `Date.now` and `performance.now`).
+
+The kernel (`Scheduler`) holds a binary heap ordered by `(timeMs, seq)`; `seq` is a monotonic
+counter, so simultaneous events run in the order they were scheduled. Each event carries its
+`kind` (for observability) and a `fire` closure owned by whoever scheduled it, so the kernel
+knows nothing about nodes, policies or metrics. Cancellation is lazy: a cancelled event stays in
+the heap and is skipped when popped. Before firing an event the kernel calls
+`metrics.advanceTo(t)`, which closes every bucket that ended at or before `t`.
 
 ```
-TRAFFIC_ARRIVAL -> creates root request -> starts an attempt on the entry node's call pipeline
-call pipeline:  Fallback( Retry( CircuitBreaker( Timeout( Bulkhead( attempt ) ) ) ) )
-attempt:        ARRIVE_AT_NODE -> admission (worker / queue / 503) -> SERVICE_DONE
-                -> downstream calls in sequence -> RESPONSE_AT_CALLER
-timers:         TIMEOUT_FIRED, RETRY_DUE, BREAKER_HALF_OPEN_DUE
-faults:         FAULT_START / FAULT_END toggle effects on nodes, edges, traffic sources
-metrics:        METRICS_TICK closes a bucket
+TRAFFIC_ARRIVAL   source fires -> RootTracker.create -> Job at the entry node -> node.arrive(job)
+                  -> source schedules its next arrival (one pending arrival per source)
+node.arrive       free worker? start : queue has room? enqueue : reply 503 (http-5xx)
+start             busy++, sample serviceTime -> schedule SERVICE_DONE
+SERVICE_DONE      draw error (always) -> release worker -> reply 200/500 -> start next queued job
+job.reply         roots: RootTracker.complete (success | failed + reason)
+                  M2: attempts schedule RESPONSE_AT_CALLER after the return network leg
+METRICS_TICK      every bucketMs while traffic is scheduled or work is pending
+(M2) ARRIVE_AT_NODE, RESPONSE_AT_CALLER, TIMEOUT_FIRED, RETRY_DUE, BREAKER_HALF_OPEN_DUE,
+     FAULT_START, FAULT_END
 ```
 
-Randomness: each node, edge and traffic source owns an independent sub-stream derived from
-`hash(seed, entityId)`, so adding an entity does not perturb the others.
+The run ends at `durationMs + drainMs` (the horizon) or earlier when no work is pending.
+Roots still in flight at the horizon are `unfinished`.
+
+Randomness: every entity owns independent sub-streams per purpose, derived from
+`hash(seed, kind, entityId, purpose)` (e.g. `node/order/service`, `node/order/error`,
+`traffic/web/arrivals`). Adding an entity never shifts another entity's random sequence, and
+a node always draws its error decision even when `errorRate` is 0, so changing `errorRate`
+does not shift its service times.
+
+## Metrics
+
+Series are bucketed by `floor(t / bucketMs)`. Counters are incremented in the current bucket;
+latencies go to a per-bucket histogram whose p50/p95/p99 are taken when the bucket closes;
+queue depth, busy workers and effective workers are time-weighted (integral of level x time),
+giving average queue depth and utilization = integral(busy) / integral(effective workers).
+Every bucket spans a full `bucketMs`; after the run ends the state is frozen.
 
 ## Public API
 
@@ -52,23 +93,43 @@ simulate(scenario, opts?): SimulationResult      // pure w.r.t. the scenario
 createSimulation(scenario, opts?): Simulation    // runUntil / snapshot / finish, for streaming
 ```
 
+`SimOptions`: `maxTraces` (default 200) and `onEvent` (observer used by tests).
 There is no global mutable state: several simulations can run in parallel or interleaved.
 
-## Extensibility: new node types (design contract)
+## Extensibility: new node types
 
-A node type is a behavior that decides how a request is admitted, processed and answered.
-Adding one (database, kafka, cache) must not touch the event core or the client policies:
+A node kind is a `NodeBehavior` registered in `NODE_FACTORIES` (`runtime/simulation.ts`).
+Adding one (database with a connection pool, kafka with partitions, cache) means writing a
+factory and registering it; the kernel, traffic, metrics and client policies are untouched.
 
 ```ts
-interface NodeBehavior {
-  admit(req: Incoming, ctx: NodeContext): "start" | "queue" | "reject";
-  process(req: Incoming, ctx: NodeContext): ProcessPlan; // own time, error decision, downstream calls
-  onComplete(req: Incoming, ctx: NodeContext): void;     // release resources
+interface Job {                       // one request that reached a node
+  readonly id: number;
+  readonly root: RootRequest;         // inherited rootId and route
+  readonly arrivedAtMs: Ms;
+  readonly reply: (r: JobResult) => void;  // call exactly once, when the response leaves
+  span: SpanRef | null;               // trace span (null when not sampled)
 }
+type JobResult = { ok: true } | { ok: false; failure: FailureKind };
+
+interface NodeContext {               // services available to a behavior
+  readonly scheduler: Scheduler;      // nowMs, schedule(at, kind, fire), cancel(event)
+  readonly series: SeriesBuilder;     // this node's metrics
+  stream(purpose: string): Rng;       // independent RNG sub-stream of this node
+  // M2: invoke(edgeId, parentJob, done) to call a dependency through the client policies
+}
+
+interface NodeBehavior {
+  readonly spec: NodeSpec;
+  arrive(job: Job): void;             // admission, processing and reply are up to the node
+  snapshot(): NodeSnapshot;
+}
+type NodeFactory = (spec: NodeSpec, ctx: NodeContext) => NodeBehavior;
 ```
 
-This is the intended shape. It is finalized in M1/M2 together with the `service` and
-`external-api` kinds, and the final signatures will be recorded here when implemented.
+The caller side never looks inside a node: it only creates a `Job` with a `reply` callback.
+That is what lets the M2 call pipeline (network, timeout, retry, breaker, bulkhead, fallback)
+wrap any node kind.
 
 ## Serialization
 

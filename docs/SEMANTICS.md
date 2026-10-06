@@ -3,31 +3,119 @@
 Every rule the engine implements, its source and the test that covers it.
 
 **Status legend**
-- `pending`: rule specified in the brief, not implemented yet.
+- `implemented`: implemented and covered by the listed test.
+- `pending`: specified in the brief, scheduled for a later milestone.
 - `UNVERIFIED`: behavior could not be checked against official documentation.
-- Rules claimed equivalent to MicroProfile Fault Tolerance / SmallRye / Quarkus must cite an
-  official URL once verified. Nothing is claimed as equivalent before that.
 
-Sources to consult in M2:
-- MicroProfile Fault Tolerance specification
-- SmallRye Fault Tolerance documentation
-- Quarkus REST Client documentation (default read timeout)
+Rules that claim equivalence with MicroProfile Fault Tolerance / SmallRye / Quarkus cite an
+official URL. Rules marked `design` are Fragor's own modeling choices; they make no claim about
+any framework.
 
-| # | Rule | Source | Test | Status |
-| --- | --- | --- | --- | --- |
-| 6.1 | Virtual time; heap ordered by (timeMs, seq); no wall clock in logic | n/a (design) | M1 | pending |
-| 6.2 | Seeded PRNG, per-entity sub-streams, distribution sampling, Poisson thinning | n/a (design) | M1 | pending |
-| 6.3 | Call composition Fallback(Retry(CircuitBreaker(Timeout(Bulkhead(attempt))))) | MP-FT spec | M2 | pending |
-| 6.4 | Blocking vs async workers; FIFO queue | n/a (design) | M2 | pending |
-| 6.5 | Timeout leaves orphaned work; `cancelOnTimeout` behavior; default edge timeout | Quarkus REST Client docs | M2 | pending |
-| 6.6 | Retry: retryOn/abortOn, backoff, jitter, maxDuration; retries on circuit-open by default | SmallRye FT docs | M2 | pending |
-| 6.7 | Circuit breaker states, sliding window, half-open, success threshold | MP-FT spec / SmallRye | M2 | pending |
-| 6.8 | Bulkhead semaphore and waiting queue | MP-FT spec | M2 | pending |
-| 6.9 | Fallback classified as degraded or success, never mixed | n/a (product) | M2 | pending |
-| 6.10 | Network latency and packet loss per leg | n/a (design) | M2 | pending |
-| 6.11 | Fault effects and combination rules | n/a (design) | M2 | pending |
-| 6.12 | Root requests inherit rootId and route | n/a (design) | M1 | pending |
-| 6.13 | Root outcome: success, degraded, failed, unfinished | n/a (design) | M1 | pending |
-| 6.14 | Metrics buckets, log-linear histogram, sampled traces | n/a (design) | M1/M2 | pending |
+Test paths are relative to `packages/engine/test/`.
 
-This table is completed milestone by milestone with URLs and test file names.
+## 6.1 Time and events — implemented (design)
+
+- Virtual time in milliseconds (float). The kernel is a binary heap ordered by `(timeMs, seq)`;
+  `seq` is a monotonic counter, so simultaneous events run in scheduling order.
+  Test: `core/event-queue.test.ts`.
+- Scheduling in the past throws. Time never goes back and no event runs twice.
+  Test: `properties.test.ts`.
+- Cancelled events stay in the heap and are skipped (lazy cancellation).
+- No wall clock or ambient randomness in simulation logic; `core/clock.ts` is the only reader of
+  real time and only feeds `stats.wallClockMs`. Test: `purity.test.ts`.
+
+## 6.2 RNG and distributions — implemented (design)
+
+- PRNG: sfc32, seeded from cyrb128(`seed`, path). Each entity has independent sub-streams per
+  purpose: `node/<id>/service`, `node/<id>/error`, `traffic/<id>/arrivals`. Adding an entity does
+  not change other entities' draws. Tests: `core/rng.test.ts`, `stream-independence.test.ts`.
+- A node draws its error decision on every completion, even with `errorRate` 0, so changing
+  `errorRate` does not shift its service-time sequence.
+- `constant`: always `ms`. `uniform`: `[minMs, maxMs)`. `exponential`: `-mean * ln(U)`.
+- `normal`: Box-Muller; **truncated** at 0 by rejection (not clamped), `meanMs >= 0` required so
+  acceptance is >= 50%.
+- `lognormal`: `mu = ln(p50)`, `sigma = (ln(p99) - ln(p50)) / 2.3263`; `p99 == p50` is constant.
+- `mixture`: component chosen with probability `weight / sum(weights)`.
+- Validation errors name the field path (`nodes[svc].serviceTime: ...`): `ms >= 0`,
+  `maxMs >= minMs`, `p99Ms >= p50Ms > 0`, `meanMs > 0` (exponential), weights `> 0`, finite values.
+- **Tolerance of test 12:** with n = 200 000 samples and a fixed seed, sampled lognormal p50 and
+  p99 must lie within 4 standard errors of the target quantile in log space,
+  `SE(q) = sigma * sqrt(q(1-q)) / (phi(z_q) * sqrt(n))`. For p50 120 ms / p99 400 ms that is
+  about 0.6% (p50) and 1.7% (p99). Test: `core/distributions.test.ts`.
+
+## 6.4 Workers and queues — implemented for a single node (design)
+
+- A job starts if `busy < workers`; otherwise it joins a FIFO queue if
+  `queueLimit === null || queueDepth < queueLimit`; otherwise the node replies immediately with
+  503 (`http-5xx`, counted in `rejected503`). `queueLimit: 0` means no waiting queue.
+  Test: `load-shedding.test.ts`.
+- On start the node samples `serviceTime`; at `SERVICE_DONE` it answers 500 with probability
+  `errorRate`, otherwise 200, releases the worker and starts the next queued job.
+- Utilization = integral(busy workers) / integral(effective workers) per bucket.
+- Blocking vs async and dependency calls: pending (M2).
+
+## 6.12 Traffic and roots — implemented (design)
+
+- Each arrival creates a root `r<n>` (creation order) with `route` and `createdAt`.
+- `constant`: arrival k at `startMs + k * 1000 / rps` (computed by multiplication, no drift).
+- `poisson`: exponential inter-arrival times.
+- `ramp`: rate goes linearly from `fromRps` to `toRps` over `durationMs` starting at the source's
+  `startMs`, then stays at `toRps`.
+- `spike`: `baseRps`; from `atMs` (absolute scenario time) linear up to `peakRps` over `rampMs`
+  (default 0), holds `holdMs`, linear down over `rampMs`, then `baseRps`.
+- `poisson`, `ramp` and `spike` are (non-homogeneous) Poisson processes generated by thinning
+  with the maximum rate of the current piecewise segment as the bound.
+- Arrivals happen on `[startMs, min(endMs, durationMs))`. Test: `traffic.test.ts`.
+
+## 6.13 Root outcome — implemented (design)
+
+- `success | degraded | failed | unfinished`; `failed` carries the final `FailureKind`.
+  `unfinished` = still in flight at the horizon `durationMs + drainMs` (default drain 60 000 ms).
+- `roots = success + degraded + failed + unfinished` and, per node at every event,
+  `arrivals = completed + queued + in service + waiting on dependencies`.
+  Test: `conservation.test.ts`.
+- Summary latency (`avgLatencyMs`, `p50Ms`, `p95Ms`, `p99Ms`) covers **every completed root**
+  (success, degraded and failed), so fast failures lower it. `null` when no root completed.
+- `goodputRps = success / (durationMs / 1000)`; degraded roots are not goodput.
+
+## 6.14 Metrics — implemented for M1 entities (design)
+
+- Bucket `i` covers `[i * bucketMs, (i + 1) * bucketMs)`; every bucket spans a full bucketMs and
+  the state is frozen after the run ends. All series arrays have `series.buckets` entries.
+- Percentiles use a log-linear histogram over integer nanoseconds (128 linear sub-buckets per
+  power of two), reporting the bucket midpoint clamped to the observed min/max. Relative error
+  <= 0.5% for values >= 0.001 ms (half a bucket, 1/256, plus 1 ns quantization; bound: 1%). Test: `core/histogram.test.ts`.
+- Percentiles of an empty bucket are `null`, never `NaN`.
+- Node series: arrivals, success (200), failed (500 + 503), rejected503, residence-time
+  percentiles (arrival at node to response), queue depth avg/max, utilization.
+- Global series: root arrivals, outcomes, end-to-end latency percentiles.
+- Traces: deterministic bottom-k sampling, keeping the `maxTraces` (default 200) roots with the
+  smallest `hash(seed, rootId)`; independent of arrival order. Each trace is a flat span list with
+  parent links (`root` -> `job`; M2 adds invocations, attempts, retry waits and fallbacks).
+- `fingerprint`: cyrb128 of the canonical JSON of the result without `stats.wallClockMs`.
+  Tests: `determinism.test.ts` (groups 1 and 15).
+
+## Pending rules (M2)
+
+| # | Rule | Source to verify | Status |
+| --- | --- | --- | --- |
+| 6.3 | Call composition Fallback(Retry(CircuitBreaker(Timeout(Bulkhead(attempt))))) | MP Fault Tolerance spec | pending |
+| 6.4 | Blocking vs async workers with dependency calls | design | pending |
+| 6.5 | Timeout, orphaned work, `cancelOnTimeout`, default edge timeout | Quarkus REST Client docs | pending |
+| 6.6 | Retry: retryOn/abortOn, backoff, jitter, maxDuration, retry on circuit-open | SmallRye FT docs | pending |
+| 6.7 | Circuit breaker states, sliding window, half-open, successThreshold | MP FT spec / SmallRye | pending |
+| 6.8 | Bulkhead semaphore and waiting queue | MP FT spec | pending |
+| 6.9 | Fallback classified as degraded or success | design | pending |
+| 6.10 | Network latency and packet loss per leg | design | pending |
+| 6.11 | Fault effects and combination rules | design | pending |
+
+Until M2, a scenario with edges, calls, faults or `cancelOnTimeout` fails with
+`not implemented: ...`. Test: `validation.test.ts`.
+
+## Known limitation: cross-engine determinism
+
+Determinism is guaranteed for the same JavaScript engine. Sampling uses `Math.log`, `Math.exp`,
+`Math.cos` and `Math.sqrt`; ECMAScript does not require `log`/`exp`/`cos` to be correctly rounded,
+so two different engines could in theory differ in the last bit. Node and Chromium both use V8, so the CLI
+and a Chromium web worker are expected to match; this is not yet verified by a test. Histogram bucketing uses only exact
+integer arithmetic.

@@ -55,3 +55,54 @@ requires v2.1.281+.
 ## 2026-10-06 — License
 Decision: `"license": "UNLICENSED"` and `"private": true`. **The license is pending the author's
 decision.**
+
+## 2026-10-06 — M1: event kernel with closures and lazy cancellation
+Context: the kernel must not know about nodes or policies (extensibility). Decision: each event
+carries its `kind` and a `fire` closure; cancelled events are skipped when popped. Alternatives:
+a central `switch` over event kinds with payloads (couples the kernel to every feature), eager
+heap removal (O(n) per cancel).
+
+## 2026-10-06 — M1: per-purpose RNG sub-streams
+Decision: streams are derived from `hash(seed, kind, id, purpose)` (e.g. `node/svc/service` and
+`node/svc/error`), finer than one stream per entity. Error decisions are always drawn. Why: what-if
+comparisons keep more random numbers in common (changing `errorRate` does not reshuffle service
+times). Alternative: one stream per entity (simpler, more coupling between parameters).
+
+## 2026-10-06 — M1: histogram over integer nanoseconds
+Decision: log-linear histogram with 128 sub-buckets per octave over `floor(ms * 1e6)`, index
+computed with `Math.clz32` and exact divisions by powers of two. Why: bucket assignment is
+bit-identical on every JS engine (no `Math.log`), error <= 0.5% (< 1% required). Alternatives:
+`Math.log`-based buckets (engine-dependent rounding at boundaries), storing raw latencies
+(memory grows with traffic; forbidden by the brief).
+
+## 2026-10-06 — M1: full-width buckets and lazy bucket closing
+Decision: the kernel calls `metrics.advanceTo(t)` before every event; METRICS_TICK only keeps
+series current while streaming and stops when no work is pending after `durationMs`. Every
+bucket spans a full `bucketMs`. Alternative: partial last bucket (made the last value depend on
+whether a tick happened to fire).
+
+## 2026-10-06 — M1: result fields that deviate from the brief's sketch
+- Latency summary fields and percentiles are `number | null` (null when there is no sample) to
+  keep the result pure JSON (no NaN).
+- `Series` is one shape for global, nodes and edges; fields that do not apply to an entity kind
+  (`queueDepthAvg`, `queueDepthMax`, `utilization`, `breakerState`) are `null` as a whole.
+- Added `resultSchemaVersion: 1` and `series.buckets`.
+- Summary latency covers every completed root (success, degraded and failed);
+  `goodputRps = success / (durationMs / 1000)`.
+
+## 2026-10-06 — M1: deterministic bottom-k trace sampling
+Decision: keep the `maxTraces` roots with the smallest `hash(seed, rootId)`. Why: deterministic,
+uniform over the whole run, independent of event timing, bounded memory. Alternatives: first N
+roots (biased to warm-up), reservoir sampling (depends on arrival order).
+
+## 2026-10-06 — M1: separate tsconfig for tests
+Decision: `packages/engine/tsconfig.json` covers `src/` with `types: []` and lib ES2022 only (no
+DOM, no Node globals); `packages/engine/test/tsconfig.json` adds Node types for tests. Why: the
+compiler rejects any Node/DOM API in engine sources. A test also checks that `src/` imports only
+relative modules.
+
+## 2026-10-06 — M1: spike and ramp timing
+Decision: `ramp.durationMs` is relative to the source's `startMs`; `spike.atMs` is absolute
+scenario time, and the spike ramps down over the same `rampMs` it ramped up. Both are
+non-homogeneous Poisson processes (thinning). `constant` is evenly spaced, first arrival at
+`startMs`.
