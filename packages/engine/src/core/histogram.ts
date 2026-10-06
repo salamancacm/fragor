@@ -9,6 +9,8 @@
  * Index computation uses only integer-exact float operations, so it is identical on every
  * JS engine.
  */
+import { detPowInt } from "./math";
+
 const SUB_BITS = 7;
 const SUB_COUNT = 1 << SUB_BITS; // 128
 const NS_PER_MS = 1_000_000;
@@ -23,7 +25,7 @@ export function bucketIndex(valueMs: number): number {
   const ns = Math.floor(valueMs * NS_PER_MS);
   if (ns < SUB_COUNT) return ns;
   const shift = floorLog2(ns) - SUB_BITS;
-  const sub = Math.floor(ns / 2 ** shift); // in [SUB_COUNT, 2 * SUB_COUNT)
+  const sub = Math.floor(ns / detPowInt(2, shift)); // in [SUB_COUNT, 2 * SUB_COUNT)
   return (shift + 1) * SUB_COUNT + (sub - SUB_COUNT);
 }
 
@@ -32,7 +34,7 @@ export function bucketMidpointMs(index: number): number {
   if (index < SUB_COUNT) return (index + 0.5) / NS_PER_MS;
   const shift = Math.floor(index / SUB_COUNT) - 1;
   const sub = (index % SUB_COUNT) + SUB_COUNT;
-  const width = 2 ** shift;
+  const width = detPowInt(2, shift);
   return (sub * width + width / 2) / NS_PER_MS;
 }
 

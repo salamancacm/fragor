@@ -1,3 +1,4 @@
+import { detLog } from "../core/math";
 import type { Rng } from "../core/rng";
 import type { Ms, TrafficPattern, TrafficSpec } from "../model/types";
 import type { ScheduledEvent, Scheduler } from "./scheduler";
@@ -206,7 +207,7 @@ export class TrafficSource {
         t = seg.endMs;
         continue;
       }
-      const candidate = t - (1000 / max) * Math.log(this.rng.nextOpen());
+      const candidate = t - (1000 / max) * detLog(this.rng.nextOpen());
       if (candidate >= seg.endMs) {
         t = seg.endMs;
         continue;

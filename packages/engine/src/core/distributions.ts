@@ -1,4 +1,5 @@
 import type { Dist } from "../model/types";
+import { detExp, detLog } from "./math";
 import type { Rng } from "./rng";
 
 /** A validated, ready-to-use distribution. Returns milliseconds, always finite and >= 0. */
@@ -19,11 +20,17 @@ function requireNonNegative(path: string, name: string, value: number): void {
   }
 }
 
-/** Standard normal sample (Box-Muller, cosine branch only: one value per two uniforms). */
+/**
+ * Standard normal sample (Marsaglia polar method, one value per accepted pair). It needs no
+ * trigonometry, so with detLog and Math.sqrt (correctly rounded) it is identical in every engine.
+ */
 export function standardNormal(rng: Rng): number {
-  const u1 = rng.nextOpen();
-  const u2 = rng.next();
-  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  for (;;) {
+    const u = 2 * rng.next() - 1;
+    const v = 2 * rng.next() - 1;
+    const s = u * u + v * v;
+    if (s > 0 && s < 1) return u * Math.sqrt((-2 * detLog(s)) / s);
+  }
 }
 
 /**
@@ -65,16 +72,16 @@ export function compileDist(dist: Dist, path = "dist"): Sampler {
       if (!Number.isFinite(dist.p99Ms) || dist.p99Ms < dist.p50Ms) {
         fail(path, `p99Ms (${dist.p99Ms}) must be >= p50Ms (${dist.p50Ms})`);
       }
-      const mu = Math.log(dist.p50Ms);
-      const sigma = (Math.log(dist.p99Ms) - mu) / Z99;
-      return (rng) => Math.exp(mu + sigma * standardNormal(rng));
+      const mu = detLog(dist.p50Ms);
+      const sigma = (detLog(dist.p99Ms) - mu) / Z99;
+      return (rng) => detExp(mu + sigma * standardNormal(rng));
     }
     case "exponential": {
       if (!Number.isFinite(dist.meanMs) || dist.meanMs <= 0) {
         fail(path, `meanMs must be > 0, got ${dist.meanMs}`);
       }
       const meanMs = dist.meanMs;
-      return (rng) => -meanMs * Math.log(rng.nextOpen());
+      return (rng) => -meanMs * detLog(rng.nextOpen());
     }
     case "mixture":
       return compileMixture(dist.components, path);

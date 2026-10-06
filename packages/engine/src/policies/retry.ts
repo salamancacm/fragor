@@ -1,3 +1,4 @@
+import { detPowInt } from "../core/math";
 import type { Rng } from "../core/rng";
 import type { FailureKind, Ms, RetryPolicy } from "../model/types";
 
@@ -45,6 +46,6 @@ export function retryDelay(policy: RetryPolicy, n: number, rng: Rng): Ms {
   }
   const configuredMax = policy.maxDelayMs ?? DEFAULT_BACKOFF_MAX_DELAY_MS;
   const maxDelay = configuredMax <= 0 ? Number.POSITIVE_INFINITY : configuredMax;
-  const base = policy.delayMs * factor ** n;
+  const base = policy.delayMs * detPowInt(factor, n);
   return Math.min(maxDelay, Math.max(0, base + jitter));
 }

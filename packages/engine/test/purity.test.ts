@@ -27,6 +27,17 @@ describe("engine purity", () => {
     }
   });
 
+  it("never uses platform transcendental functions or ** outside core/math.ts", () => {
+    // ECMAScript lets engines approximate these differently (last-bit differences between Node
+    // and browsers); core/math.ts implements log/exp with basic arithmetic only.
+    for (const f of files.filter((p) => !p.endsWith(join("core", "math.ts")))) {
+      expect(code(f), f).not.toMatch(
+        /Math\.(log|log2|log10|log1p|exp|expm1|pow|cos|sin|tan|acos|asin|atan|atan2|cosh|sinh|tanh|cbrt|hypot)\b/,
+      );
+      expect(code(f), f).not.toMatch(/\*\*/);
+    }
+  });
+
   it("only the runtime entry point reads the wall clock", () => {
     const users = files.filter((f) => /core\/clock"/.test(code(f)));
     expect(users.map((f) => f.slice(SRC.length + 1).replaceAll("\\", "/"))).toEqual([
