@@ -141,5 +141,25 @@ smoother, and the real tail (p99 4.3 s vs 2.4 s) is longer.
 - `quarkus.thread-pool.queue-size` behaves like Fragor's `queueLimit`: 300 concurrent requests to
   payment (50 threads, queue 100) gave 50 + 50 + 50 served in FIFO waves and 150 immediate 503s.
 
-Fragor does not model the first point yet: it assumes timeouts fire on time. Read the model as the
-behavior of a system whose timeouts are enforced independently of its worker pool.
+### Fragor now models it
+
+`timeout.enforcement: "caller-pool"` makes a timeout a task for the caller's worker pool, late when
+the pool is busy and lost when its queue is full, with the read timeout as backstop (see
+[SEMANTICS.md](../../docs/SEMANTICS.md), 6.5). The mirror scenarios use it where the real code uses
+`@Timeout`; the `*-read-timeout.json` variants keep the default `"timer"`.
+
+| | Real, `@Timeout` | Fragor, `fragor/baseline.json` (caller-pool) |
+| --- | --- | --- |
+| Baseline: success / failed | 71.8% / 28.2% | 70.5% / 29.5% |
+| Baseline: p50 / p95 / p99 | 149 ms / 26.6 s / 28.0 s | 156 ms / 26.6 s / 28.0 s |
+| Baseline: 503 at the gateway | 1,664 | 1,772 |
+| Baseline: requests reaching payment | 4,266 | 4,250 |
+| Breaker: success / degraded / failed | 38.3% / 33.4% / 28.3% | 37.9% / 32.5% / 29.5% |
+| Breaker: p50 / p95 / p99 | 177 ms / 26.4 s / 27.9 s | 181 ms / 26.5 s / 28.0 s |
+
+Fragor reports it as the finding *timeout-starvation*: for this demo, "22 timeouts ran late and 150
+were lost because Order Service had no free worker".
+
+To compare a real run with the right mirror, `load/experiment.sh` picks `fragor/baseline.json` or
+`fragor/breaker.json`; for runs with `ORDER_PAYMENT_READ_TIMEOUT` / `GATEWAY_ORDER_READ_TIMEOUT`
+set, it picks the `*-read-timeout.json` variants.

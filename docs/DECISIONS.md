@@ -279,3 +279,17 @@ and model and reality agree (49.5% vs 48.9% success; 15,172 vs 15,271 requests t
 11,939 rejections). Alternatives considered: Micrometer/Prometheus (adds dependencies and its gauges
 do not map one to one to the model's quantities). Open: modeling late/lost timeouts in the engine
 (an option on the calling node: timeout enforcement through its own worker queue).
+
+## 2026-10-07 — Timeout enforcement: "timer" or "caller-pool"
+Context: the real-services comparison showed that a synchronous SmallRye @Timeout in Quarkus is
+enforced through the caller's own worker pool, so it is late or lost exactly when the service is
+overloaded; the engine assumed timeouts always fire on time. Decision: `TimeoutPolicy.enforcement`
+(Fragor modeling extension, default "timer" so every existing scenario and fingerprint is
+unchanged). "caller-pool" turns the timeout into a zero-duration task in the calling node's queue
+(shared limit with requests, not counted in queueDepth); a full queue loses it; the read-timeout
+default remains a backstop. New per-edge counters `timeoutsDelayed` and `timeoutsLost`, a
+`timeout-starvation` finding, and a UI switch. Validated against the Quarkus demo: the model now
+reproduces both real configurations (70.5% vs 71.8% success with @Timeout; 48.9% vs 49.5% with the
+read-timeout). Alternatives: a node-level flag (less precise: the same service can use both kinds of
+timeouts), modeling every SmallRye timer use (retry delays and breaker transitions are not affected
+in synchronous mode).

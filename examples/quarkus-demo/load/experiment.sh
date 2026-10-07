@@ -4,8 +4,15 @@
 # Usage: load/experiment.sh <label>   (ORDER_PROFILE=breaker selects the breaker scenario)
 set -euo pipefail
 label="${1:?usage: load/experiment.sh <label>}"
-scenario="fragor/baseline.json"
-[ "${ORDER_PROFILE:-prod}" = "breaker" ] && scenario="fragor/breaker.json"
+# The mirror scenario: baseline or breaker, and the "-read-timeout" variant when the client read
+# timeouts enforce the deadlines (otherwise the code's @Timeout is modeled as "caller-pool").
+scenario="fragor/baseline"
+[ "${ORDER_PROFILE:-prod}" = "breaker" ] && scenario="fragor/breaker"
+if [ -n "${ORDER_PAYMENT_READ_TIMEOUT:-}" ] && [ "${ORDER_PAYMENT_READ_TIMEOUT}" != "30000" ]; then
+  scenario="${scenario}-read-timeout"
+fi
+scenario="${scenario}.json"
+echo "mirror scenario: $scenario"
 cli="../../packages/cli/dist/fragor.mjs"
 [ -f "$cli" ] || { echo "build the Fragor CLI first: (cd ../.. && pnpm build)"; exit 1; }
 mkdir -p results

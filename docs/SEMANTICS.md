@@ -110,16 +110,34 @@ Test paths are relative to `packages/engine/test/`.
   Cancelled work never replies and is not counted as orphaned. Test: `timeout-orphans.test.ts`.
 - A lost response (packet loss) after the job finished is not orphaned work: the work ended
   before the caller gave up. Test: `network-faults.test.ts`.
-- **Model assumption: a timeout fires on time.** Verified on 2026-10-07 against real services
-  (examples/quarkus-demo) that this does **not** hold for a synchronous SmallRye `@Timeout` in Quarkus
-  when the worker pool is saturated: the interruption is scheduled on SmallRye's timer, which submits
-  it to the async executor (`new ThreadTimer(asyncExecutor)` in
-  [ExecutorHolder.java](https://github.com/smallrye/smallrye-fault-tolerance/blob/6.11.4/implementation/fault-tolerance/src/main/java/io/smallrye/faulttolerance/ExecutorHolder.java)),
-  and Quarkus provides its worker pool as that executor
-  ([QuarkusAsyncExecutorProvider.java](https://github.com/quarkusio/quarkus/blob/3.40.1/extensions/smallrye-fault-tolerance/runtime/src/main/java/io/quarkus/smallrye/faulttolerance/runtime/QuarkusAsyncExecutorProvider.java)).
-  Saturated pool: late timeouts; full queue: the timer task is rejected and the timeout is lost.
-  With the REST client `read-timeout` (enforced on the Vert.x event loop) the assumption holds and
-  the real services matched the model closely. Fragor does not model the late or lost timeout yet.
+- **Timeout enforcement — verified against real services (2026-10-07).** `timeout.enforcement`:
+  - `"timer"` (default): the timeout fires at the deadline. Matches the Quarkus REST client
+    `read-timeout`, enforced by Vert.x on the event loop.
+  - `"caller-pool"`: at the deadline the interruption becomes a task for the **calling node's
+    worker pool**, as a synchronous SmallRye `@Timeout` in Quarkus: SmallRye's `Timeout` schedules
+    `timeoutAndInterrupt` on its timer
+    ([Timeout.java](https://github.com/smallrye/smallrye-fault-tolerance/blob/6.11.4/implementation/core/src/main/java/io/smallrye/faulttolerance/core/timeout/Timeout.java)),
+    whose thread submits due tasks to the async executor
+    ([ThreadTimer.java](https://github.com/smallrye/smallrye-fault-tolerance/blob/6.11.4/implementation/core/src/main/java/io/smallrye/faulttolerance/core/timer/ThreadTimer.java),
+    [ExecutorHolder.java](https://github.com/smallrye/smallrye-fault-tolerance/blob/6.11.4/implementation/fault-tolerance/src/main/java/io/smallrye/faulttolerance/ExecutorHolder.java)),
+    and Quarkus provides its worker pool as that executor
+    ([QuarkusAsyncExecutorProvider.java](https://github.com/quarkusio/quarkus/blob/3.40.1/extensions/smallrye-fault-tolerance/runtime/src/main/java/io/quarkus/smallrye/faulttolerance/runtime/QuarkusAsyncExecutorProvider.java)).
+    Model: with a free worker the task runs at once; otherwise it waits in the node's FIFO queue
+    behind the requests already there (a **late** timeout, counted in `timeoutsDelayed`); when the
+    queue is full it is rejected (a **lost** timeout, `timeoutsLost`; the real log line is
+    `SRFTL11000 ... RejectedExecutionException`). The task takes no service time, shares
+    `queueLimit` with requests and is not counted in `queueDepth`. A task whose attempt already
+    ended does nothing when it runs. Timeout tasks never reach nodes without a worker pool.
+  - `"caller-pool"` keeps `options.defaultEdgeTimeoutMs` (the REST client read timeout, 30 s by
+    default) as an independent backstop when it is later than `valueMs`.
+  - `@Retry` delays and the breaker's move to half-open are not affected: SmallRye sleeps on the
+    calling thread for synchronous retries, and the breaker re-checks its delay lazily on the next
+    call.
+  - Validation (examples/quarkus-demo, mirror scenarios in `examples/quarkus-demo/fragor`): with
+    `@Timeout` the real services gave 71.8% success, p95 26.6 s, 1,664 gateway rejections and 4,266
+    requests to payment; the model with `"caller-pool"` gives 70.5%, 26.6 s, 1,772 and 4,250. With
+    the read-timeout the real services gave 49.5% and the model with `"timer"` 48.9%.
+  Tests: `timeout-enforcement.test.ts`, `properties-graph.test.ts`.
 
 ## 6.6 Retry — verified
 

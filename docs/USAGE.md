@@ -102,6 +102,12 @@ The building blocks:
   lets calls apply only to some endpoints.
 - **faults**: time-boxed latency, error rate, outage, capacity loss, packet loss or traffic surges.
 
+**Quarkus users:** a synchronous `@Timeout` is enforced on the caller's worker pool, so it runs
+late or is lost when that pool is saturated. Model it with
+`"timeout": { "valueMs": 2000, "enforcement": "caller-pool" }` (in the web app: *Timeout runs on
+caller's pool*). The REST client `read-timeout` fires on time: keep the default `"timer"`. The
+finding `timeout-starvation` tells you when this matters.
+
 How each rule works, and which framework documentation it follows, is in
 [SEMANTICS.md](SEMANTICS.md).
 

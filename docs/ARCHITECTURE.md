@@ -188,6 +188,7 @@ value }` where `metric` names a field of the result.
 | cascade-propagation | a caller saturates at or after the dependency it calls (chain from an origin) | critical if the chain reaches an entry node |
 | retry-amplification | attempts / calls >= 1.5 on an edge with retry | by attempts that reached the dependency: >= 2.5 critical, >= 1.5 warning; info if most were rejected by breaker or bulkhead |
 | orphaned-work | a node finished work after its caller timed out | critical if >= 10% of its completed work |
+| timeout-starvation | "caller-pool" timeouts ran late or were lost because the caller had no free worker | critical if any was lost |
 | missing-timeout | an edge has no timeout policy | warning if its p99 reached half the default timeout or it hit it |
 | single-point-of-failure | every traffic source needs the node through required calls with no fallback | warning if it failed or saturated in the run, else info |
 
