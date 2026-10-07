@@ -1,6 +1,8 @@
 package fragor.demo.payment;
 
+import fragor.demo.common.ServiceProbe;
 import fragor.demo.common.SimulatedWork;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -17,10 +19,15 @@ public class PaymentResource {
     @RestClient
     ExternalPaymentClient external;
 
+    @Inject
+    ServiceProbe probe;
+
     @POST
     @Produces(MediaType.TEXT_PLAIN)
     public String pay() {
-        SimulatedWork.sleep(5);
-        return external.charge();
+        return probe.work(() -> {
+            SimulatedWork.sleep(5);
+            return probe.call("external", external::charge);
+        });
     }
 }

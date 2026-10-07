@@ -1,5 +1,6 @@
 package fragor.demo.order;
 
+import fragor.demo.common.ServiceProbe;
 import fragor.demo.common.SimulatedWork;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.POST;
@@ -14,11 +15,17 @@ public class OrderResource {
     @Inject
     PaymentGateway payments;
 
+    @Inject
+    ServiceProbe probe;
+
     @POST
     @Produces(MediaType.TEXT_PLAIN)
     public String create() {
-        SimulatedWork.sleep(SimulatedWork.lognormalMs(10, 40));
-        String payment = payments.charge();
-        return "degraded".equals(payment) ? "ordered-degraded" : "ordered";
+        return probe.work(() -> {
+            SimulatedWork.sleep(SimulatedWork.lognormalMs(10, 40));
+            // The whole fault-tolerant invocation: retries, breaker and fallback included.
+            String payment = probe.call("payment-invocation", payments::charge);
+            return "degraded".equals(payment) ? "ordered-degraded" : "ordered";
+        });
     }
 }

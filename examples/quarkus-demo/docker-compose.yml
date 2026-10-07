@@ -15,6 +15,7 @@ services:
   payment:
     <<: *service
     build: { context: ., args: { SERVICE: payment } }
+    ports: ["8082:8082"]
     environment:
       QUARKUS_REST_CLIENT_EXTERNAL_URL: http://external-payment:8083
       CONNECTION_POOL_SIZE: ${CONNECTION_POOL_SIZE:-1000}
@@ -23,8 +24,12 @@ services:
   order:
     <<: *service
     build: { context: ., args: { SERVICE: order } }
+    ports: ["8081:8081"]
     environment:
       QUARKUS_REST_CLIENT_PAYMENT_URL: http://payment:8082
+      # Read timeout enforced by Vert.x on the event loop (default 30000). Set to 2000 to make the
+      # 2 s timeout independent of the saturated worker pool (see README, "Root cause").
+      QUARKUS_REST_CLIENT_PAYMENT_READ_TIMEOUT: ${ORDER_PAYMENT_READ_TIMEOUT:-30000}
       CONNECTION_POOL_SIZE: ${CONNECTION_POOL_SIZE:-1000}
       # "prod" = scenario 01 (timeout + retry); "breaker" = scenario 02 (+ breaker + fallback)
       QUARKUS_PROFILE: ${ORDER_PROFILE:-prod}
@@ -36,6 +41,7 @@ services:
     ports: ["8080:8080"]
     environment:
       QUARKUS_REST_CLIENT_ORDER_URL: http://order:8081
+      QUARKUS_REST_CLIENT_ORDER_READ_TIMEOUT: ${GATEWAY_ORDER_READ_TIMEOUT:-30000}
       CONNECTION_POOL_SIZE: ${CONNECTION_POOL_SIZE:-1000}
     depends_on: [order]
 
@@ -49,6 +55,6 @@ services:
     environment:
       GATEWAY_URL: http://gateway:8080
       ADMIN_URL: http://external-payment:8083
-      RUN_LABEL: ${ORDER_PROFILE:-prod}-pool${CONNECTION_POOL_SIZE:-1000}
+      RUN_LABEL: ${RUN_LABEL:-${ORDER_PROFILE:-prod}}
     command: ["run", "--quiet", "/scripts/checkout.js"]
     depends_on: [gateway]

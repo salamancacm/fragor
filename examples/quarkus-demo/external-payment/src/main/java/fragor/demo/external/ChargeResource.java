@@ -1,5 +1,6 @@
 package fragor.demo.external;
 
+import fragor.demo.common.ServiceProbe;
 import fragor.demo.common.SimulatedWork;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.POST;
@@ -17,10 +18,15 @@ public class ChargeResource {
     @Inject
     InjectedLatency injected;
 
+    @Inject
+    ServiceProbe probe;
+
     @POST
     @Produces(MediaType.TEXT_PLAIN)
     public String charge() {
-        SimulatedWork.sleep(SimulatedWork.lognormalMs(120, 400) + injected.extraMs());
-        return "charged";
+        return probe.work(() -> {
+            SimulatedWork.sleep(SimulatedWork.lognormalMs(120, 400) + injected.extraMs());
+            return "charged";
+        });
     }
 }

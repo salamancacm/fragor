@@ -1,5 +1,6 @@
 package fragor.demo.gateway;
 
+import fragor.demo.common.ServiceProbe;
 import fragor.demo.common.SimulatedWork;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.POST;
@@ -14,10 +15,15 @@ public class CheckoutResource {
     @Inject
     OrderGateway orders;
 
+    @Inject
+    ServiceProbe probe;
+
     @POST
     @Produces(MediaType.TEXT_PLAIN)
     public String checkout() {
-        SimulatedWork.sleep(2);
-        return orders.create();
+        return probe.work(() -> {
+            SimulatedWork.sleep(2);
+            return probe.call("order-invocation", orders::create);
+        });
     }
 }
