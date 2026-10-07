@@ -87,6 +87,21 @@ export function ParamsPanel({ scenario, params, ops, onChange }: Props) {
                 />
               </div>
             </div>
+            <div className="flex items-center justify-between gap-2">
+              <Label
+                htmlFor={`pool-${edge.id}`}
+                className="text-xs"
+                title="Synchronous @Timeout in Quarkus: the interruption runs on the caller's worker pool, so it is late or lost when that pool is saturated. Off = enforced on time (REST client read-timeout)."
+              >
+                Timeout runs on caller's pool
+              </Label>
+              <Switch
+                id={`pool-${edge.id}`}
+                checked={p.timeoutOnCallerPool}
+                disabled={p.timeoutMs === null}
+                onCheckedChange={(checked) => setEdge(edge.id, { timeoutOnCallerPool: checked })}
+              />
+            </div>
             <div className="flex items-center justify-between">
               <Label htmlFor={`breaker-${edge.id}`} className="text-xs">
                 Circuit breaker

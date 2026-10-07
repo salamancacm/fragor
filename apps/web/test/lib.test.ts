@@ -41,7 +41,12 @@ describe("params -> patch", () => {
       ...p,
       edges: {
         ...p.edges,
-        "order-payment": { timeoutMs: 2000, retries: 3, breaker: false },
+        "order-payment": {
+          timeoutMs: 2000,
+          timeoutOnCallerPool: false,
+          retries: 3,
+          breaker: false,
+        },
       },
     };
     const noBreaker = applyPatch(s02, patchFor(s02, off));
@@ -52,7 +57,7 @@ describe("params -> patch", () => {
       ...paramsOf(s01),
       edges: {
         ...paramsOf(s01).edges,
-        "order-payment": { timeoutMs: 2000, retries: 3, breaker: true },
+        "order-payment": { timeoutMs: 2000, timeoutOnCallerPool: false, retries: 3, breaker: true },
       },
     };
     const withBreaker = applyPatch(s01, patchFor(s01, on));
@@ -65,7 +70,15 @@ describe("params -> patch", () => {
     const p = paramsOf(s01);
     const changed = {
       ...p,
-      edges: { ...p.edges, "order-payment": { timeoutMs: 1500, retries: 1, breaker: false } },
+      edges: {
+        ...p.edges,
+        "order-payment": {
+          timeoutMs: 1500,
+          timeoutOnCallerPool: false,
+          retries: 1,
+          breaker: false,
+        },
+      },
     };
     const s = applyPatch(s01, patchFor(s01, changed));
     const edge = s.edges.find((e) => e.id === "order-payment");
@@ -73,10 +86,35 @@ describe("params -> patch", () => {
     expect(edge?.policies.retry?.maxRetries).toBe(1);
     const removed = {
       ...p,
-      edges: { ...p.edges, "order-payment": { timeoutMs: null, retries: 0, breaker: false } },
+      edges: {
+        ...p.edges,
+        "order-payment": {
+          timeoutMs: null,
+          timeoutOnCallerPool: false,
+          retries: 0,
+          breaker: false,
+        },
+      },
     };
     const s2 = applyPatch(s01, patchFor(s01, removed));
     expect(s2.edges.find((e) => e.id === "order-payment")?.policies).toEqual({});
+  });
+
+  it("switches the timeout to the caller's worker pool", () => {
+    const p = paramsOf(s01);
+    const onPool = {
+      ...p,
+      edges: {
+        ...p.edges,
+        "order-payment": { timeoutMs: 2000, timeoutOnCallerPool: true, retries: 3, breaker: false },
+      },
+    };
+    const s = applyPatch(s01, patchFor(s01, onPool));
+    expect(s.edges.find((e) => e.id === "order-payment")?.policies.timeout).toEqual({
+      valueMs: 2000,
+      enforcement: "caller-pool",
+    });
+    expect(paramsOf(s).edges["order-payment"]?.timeoutOnCallerPool).toBe(true);
   });
 
   it("scales every traffic pattern", () => {

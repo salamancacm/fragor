@@ -15,6 +15,8 @@ export const DEFAULT_RETRY: Omit<RetryPolicy, "maxRetries"> = { delayMs: 0, jitt
 export interface EdgeParams {
   /** Attempt timeout; null = no timeout policy (Quarkus default read timeout applies). */
   timeoutMs: number | null;
+  /** Timeout enforced on the caller's worker pool (synchronous @Timeout in Quarkus). */
+  timeoutOnCallerPool: boolean;
   /** Retries after the first attempt; 0 = no retry policy. */
   retries: number;
   breaker: boolean;
@@ -32,6 +34,7 @@ export function paramsOf(s: Scenario): Params {
   for (const e of s.edges) {
     edges[e.id] = {
       timeoutMs: e.policies.timeout?.valueMs ?? null,
+      timeoutOnCallerPool: e.policies.timeout?.enforcement === "caller-pool",
       retries: e.policies.retry?.maxRetries ?? 0,
       breaker: e.policies.circuitBreaker !== undefined,
     };
@@ -68,11 +71,21 @@ export function patchFor(base: Scenario, params: Params): PatchOp[] {
     if (want === undefined) continue;
     const path = (...rest: string[]) => ["edges", e.id, "policies", ...rest];
     const have = e.policies;
-    if (want.timeoutMs !== (have.timeout?.valueMs ?? null)) {
+    const haveOnPool = have.timeout?.enforcement === "caller-pool";
+    if (
+      want.timeoutMs !== (have.timeout?.valueMs ?? null) ||
+      (want.timeoutMs !== null && want.timeoutOnCallerPool !== haveOnPool)
+    ) {
       ops.push(
         want.timeoutMs === null
           ? { op: "unset", path: path("timeout") }
-          : { op: "set", path: path("timeout"), value: { valueMs: want.timeoutMs } },
+          : {
+              op: "set",
+              path: path("timeout"),
+              value: want.timeoutOnCallerPool
+                ? { valueMs: want.timeoutMs, enforcement: "caller-pool" }
+                : { valueMs: want.timeoutMs },
+            },
       );
     }
     if (want.retries !== (have.retry?.maxRetries ?? 0)) {
