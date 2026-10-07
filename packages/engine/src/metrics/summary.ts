@@ -44,6 +44,8 @@ export function buildSummary(
     circuitOpen: sumOver(metrics.edges, "circuitOpen"),
     bulkheadFull: sumOver(metrics.edges, "bulkheadFull"),
     fallbacks: sumOver(metrics.edges, "fallbacks"),
+    timeoutsDelayed: sumOver(metrics.edges, "timeoutsDelayed"),
+    timeoutsLost: sumOver(metrics.edges, "timeoutsLost"),
     byTraffic: roots.byTraffic,
   };
 }

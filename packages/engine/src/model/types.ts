@@ -37,6 +37,14 @@ export const FAILURE_KINDS: readonly FailureKind[] = [
 
 export interface TimeoutPolicy {
   valueMs: Ms;
+  /**
+   * Who enforces the deadline (Fragor modeling extension). "timer" (default): it fires on time,
+   * like the REST client read timeout enforced on the Vert.x event loop. "caller-pool": the
+   * interruption is a task for the calling node's worker pool, like a synchronous SmallRye
+   * @Timeout in Quarkus; it runs late when the pool is busy and is lost when its queue is full.
+   * The scenario's defaultEdgeTimeoutMs (read timeout) still applies as an independent backstop.
+   */
+  enforcement?: "timer" | "caller-pool";
 }
 
 export interface RetryPolicy {
@@ -251,6 +259,10 @@ export interface Series {
   bulkheadFull: number[];
   /** Invocations answered by a fallback. */
   fallbacks: number[];
+  /** "caller-pool" timeouts that ran late because the caller's workers were busy. */
+  timeoutsDelayed: number[];
+  /** "caller-pool" timeouts lost because the caller's queue was full. */
+  timeoutsLost: number[];
   queueDepthAvg: number[] | null;
   queueDepthMax: number[] | null;
   utilization: number[] | null;
@@ -313,6 +325,8 @@ export interface SimulationSummary {
   circuitOpen: number;
   bulkheadFull: number;
   fallbacks: number;
+  timeoutsDelayed: number;
+  timeoutsLost: number;
   /** Outcomes per traffic source id. */
   byTraffic: Record<string, TrafficSummary>;
 }
@@ -357,6 +371,8 @@ export interface NodeSnapshot {
   queueDepth: number;
   /** Requests whose worker was released but are still waiting for dependencies (async). */
   waitingOnDependencies: number;
+  /** "caller-pool" timeout tasks waiting in this node's queue (not counted in queueDepth). */
+  queuedTimerTasks: number;
   effectiveWorkers: number;
   busyWorkers: number;
 }

@@ -69,6 +69,13 @@ export interface NodeBehavior {
   cancel(job: Job): void;
   /** Faults on this node changed (capacity, latency, error rate). */
   onFaultsChanged(): void;
+  /**
+   * Optional: run a short task (a "caller-pool" timeout) on this node's worker pool. "ran": a worker
+   * was free and it ran now; "queued": it waits in the node's queue behind requests and runs when a
+   * worker frees up; "rejected": the queue is full and the task is dropped. Node kinds without a
+   * worker pool omit it and the task runs immediately.
+   */
+  runTimerTask?(task: () => void): "ran" | "queued" | "rejected";
   snapshot(): NodeSnapshot;
 }
 

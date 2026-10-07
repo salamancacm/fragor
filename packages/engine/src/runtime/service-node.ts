@@ -7,6 +7,11 @@ import { applyLatencyEffects } from "./network";
 import type { InvocationHandle, Job, JobResult, NodeBehavior, NodeContext } from "./node-behavior";
 import type { ScheduledEvent } from "./scheduler";
 
+/** A "caller-pool" timeout waiting for a worker of this node (see NodeBehavior.runTimerTask). */
+interface TimerItem {
+  readonly timer: () => void;
+}
+
 interface Work {
   readonly job: Job;
   phase: "queued" | "service" | "calls";
@@ -24,7 +29,9 @@ interface Work {
  * serviceTime and the job waits without a worker.
  */
 export class ServiceNode implements NodeBehavior {
-  private readonly queue = new Fifo<Work>();
+  /** FIFO of requests and timer tasks: both share queueLimit, like a Quarkus worker pool queue. */
+  private readonly queue = new Fifo<Work | TimerItem>();
+  private queuedJobs = 0;
   private readonly work = new Map<number, Work>();
   private readonly serviceTime: Sampler;
   private readonly serviceRng: Rng;
@@ -62,9 +69,10 @@ export class ServiceNode implements NodeBehavior {
     this.work.set(job.id, w);
     if (this.busy < this.effectiveWorkers()) {
       this.start(w);
-    } else if (this.spec.queueLimit === null || this.queue.length < this.spec.queueLimit) {
+    } else if (this.hasQueueRoom()) {
       this.queue.push(w);
-      this.ctx.series.setQueueDepth(this.now, this.queue.length);
+      this.queuedJobs++;
+      this.ctx.series.setQueueDepth(this.now, this.queuedJobs);
     } else {
       this.ctx.series.inc("rejected503");
       this.ctx.global.inc("rejected503");
@@ -77,7 +85,8 @@ export class ServiceNode implements NodeBehavior {
     if (w === undefined) return;
     if (w.phase === "queued") {
       this.queue.remove((q) => q === w);
-      this.ctx.series.setQueueDepth(this.now, this.queue.length);
+      this.queuedJobs--;
+      this.ctx.series.setQueueDepth(this.now, this.queuedJobs);
       this.drop(w);
     } else if (w.phase === "calls") {
       w.invocation?.cancel();
@@ -96,7 +105,8 @@ export class ServiceNode implements NodeBehavior {
       arrivals: this.arrivals,
       completed: this.completed,
       inService: this.busy,
-      queueDepth: this.queue.length,
+      queueDepth: this.queuedJobs,
+      queuedTimerTasks: this.queue.length - this.queuedJobs,
       waitingOnDependencies: this.waiting,
       effectiveWorkers: this.effectiveWorkers(),
       busyWorkers: this.busy,
@@ -218,11 +228,36 @@ export class ServiceNode implements NodeBehavior {
     this.startNext();
   }
 
+  /**
+   * A short task needing one of this node's workers (a "caller-pool" timeout). It takes no
+   * service time: with a free worker it runs now; otherwise it queues behind the requests already
+   * waiting, and it is rejected when the queue is full.
+   */
+  runTimerTask(task: () => void): "ran" | "queued" | "rejected" {
+    if (this.busy < this.effectiveWorkers()) {
+      task();
+      return "ran";
+    }
+    if (!this.hasQueueRoom()) return "rejected";
+    this.queue.push({ timer: task });
+    return "queued";
+  }
+
+  private hasQueueRoom(): boolean {
+    return this.spec.queueLimit === null || this.queue.length < this.spec.queueLimit;
+  }
+
   private startNext(): void {
     while (this.busy < this.effectiveWorkers()) {
       const next = this.queue.shift();
       if (next === undefined) return;
-      this.ctx.series.setQueueDepth(this.now, this.queue.length);
+      if ("timer" in next) {
+        // Takes a worker only for an instant: run it as its own event (no re-entrancy here).
+        this.ctx.scheduler.schedule(this.now, "TIMEOUT_FIRED", next.timer);
+        continue;
+      }
+      this.queuedJobs--;
+      this.ctx.series.setQueueDepth(this.now, this.queuedJobs);
       this.start(next);
     }
   }

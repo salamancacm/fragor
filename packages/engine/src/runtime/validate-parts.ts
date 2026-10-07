@@ -9,7 +9,13 @@ export function validateEdge(e: EdgeSpec, nodeIds: ReadonlySet<string>): void {
   compileDist(e.latency, `${p}.latency`);
   requireFraction(`${p}.packetLoss`, e.packetLoss);
   const { timeout, retry, circuitBreaker, bulkhead, fallback } = e.policies;
-  if (timeout !== undefined) requirePositive(`${p}.policies.timeout.valueMs`, timeout.valueMs);
+  if (timeout !== undefined) {
+    requirePositive(`${p}.policies.timeout.valueMs`, timeout.valueMs);
+    const enforcement: unknown = timeout.enforcement;
+    if (enforcement !== undefined && enforcement !== "timer" && enforcement !== "caller-pool") {
+      throw new Error(`${p}.policies.timeout.enforcement must be "timer" or "caller-pool"`);
+    }
+  }
   if (retry !== undefined) {
     const r = `${p}.policies.retry`;
     if (retry.maxRetries !== -1) requireInteger(`${r}.maxRetries`, retry.maxRetries, 0);

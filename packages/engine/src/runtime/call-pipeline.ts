@@ -23,6 +23,8 @@ export interface CallWorld {
     reply: (r: JobResult) => void,
     orphaned: boolean,
   ): Job | null;
+  /** Runs a "caller-pool" timeout task on a node's worker pool (see NodeBehavior.runTimerTask). */
+  runOnPool(nodeId: string, task: () => void): "ran" | "queued" | "rejected";
   /** Cancels a job at its node (cancelOnTimeout propagation). */
   cancelJob(job: Job): void;
 }
@@ -33,6 +35,8 @@ interface Attempt {
   readonly span: SpanRef | null;
   generation: number | null;
   timer: ScheduledEvent | null;
+  /** Read-timeout backstop of a "caller-pool" timeout. */
+  backstop: ScheduledEvent | null;
   waiter: BulkheadWaiter | null;
   holdsBulkhead: boolean;
   /** Counted in edge.inFlight (admitted by the breaker). */
@@ -100,6 +104,7 @@ export class Invocation implements InvocationHandle {
       }),
       generation: null,
       timer: null,
+      backstop: null,
       waiter: null,
       holdsBulkhead: false,
       inFlight: false,
@@ -119,9 +124,7 @@ export class Invocation implements InvocationHandle {
       }
     }
     // The timeout watcher starts before the bulkhead, so bulkhead waiting counts toward it.
-    att.timer = this.world.scheduler.schedule(this.now + edge.timeoutMs, "TIMEOUT_FIRED", () =>
-      this.onTimeout(att),
-    );
+    this.armTimeout(att);
     edge.inFlight++;
     att.inFlight = true;
     if (edge.bulkhead === null) {
@@ -186,6 +189,42 @@ export class Invocation implements InvocationHandle {
     });
   }
 
+  /**
+   * "timer": the timeout fires at the deadline. "caller-pool": at the deadline the interruption is
+   * handed to the caller's worker pool, where it may wait (late) or be rejected (lost); the
+   * independent read-timeout backstop still bounds the attempt.
+   */
+  private armTimeout(att: Attempt): void {
+    const { edge } = this;
+    const deadline = this.now + edge.timeoutMs;
+    if (edge.timeoutEnforcement === "timer") {
+      att.timer = this.world.scheduler.schedule(deadline, "TIMEOUT_FIRED", () =>
+        this.onTimeout(att),
+      );
+      return;
+    }
+    att.timer = this.world.scheduler.schedule(deadline, "TIMEOUT_FIRED", () => {
+      att.timer = null;
+      if (att.done) return;
+      const outcome = this.world.runOnPool(edge.spec.from, () => {
+        if (att.done) return; // the attempt ended while the task waited: nothing to interrupt
+        if (this.now > deadline) this.count("timeoutsDelayed");
+        this.onTimeout(att);
+      });
+      if (outcome === "rejected") this.count("timeoutsLost");
+    });
+    if (edge.backstopMs !== null) {
+      att.backstop = this.world.scheduler.schedule(
+        this.now + edge.backstopMs,
+        "TIMEOUT_FIRED",
+        () => {
+          att.backstop = null;
+          if (!att.done) this.onTimeout(att);
+        },
+      );
+    }
+  }
+
   private onTimeout(att: Attempt): void {
     att.timer = null;
     att.timedOut = true;
@@ -226,6 +265,10 @@ export class Invocation implements InvocationHandle {
     if (att.timer !== null) {
       this.world.scheduler.cancel(att.timer);
       att.timer = null;
+    }
+    if (att.backstop !== null) {
+      this.world.scheduler.cancel(att.backstop);
+      att.backstop = null;
     }
     const bulkhead = this.edge.bulkhead;
     if (bulkhead !== null && att.waiter !== null) bulkhead.abandon(att.waiter);

@@ -12,6 +12,13 @@ export interface EdgeRuntime {
   readonly spec: EdgeSpec;
   readonly series: SeriesBuilder;
   readonly timeoutMs: Ms;
+  /** How the timeout is enforced (TimeoutPolicy.enforcement, default "timer"). */
+  readonly timeoutEnforcement: "timer" | "caller-pool";
+  /**
+   * Independent read-timeout backstop for "caller-pool" timeouts (defaultEdgeTimeoutMs), or null
+   * when it would not fire before the policy timeout.
+   */
+  readonly backstopMs: Ms | null;
   readonly breaker: CircuitBreaker | null;
   readonly bulkhead: Bulkhead | null;
   readonly fallback: CompiledFallback | null;

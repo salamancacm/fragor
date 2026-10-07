@@ -96,6 +96,13 @@ const METRICS: readonly MetricDef[] = [
     read: (s) => s.timeouts,
   },
   {
+    key: "timeoutsLost",
+    label: "Timeouts lost",
+    unit: "count",
+    betterWhen: "lower",
+    read: (s) => s.timeoutsLost,
+  },
+  {
     key: "rejected503",
     label: "Rejected 503",
     unit: "count",

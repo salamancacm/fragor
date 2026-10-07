@@ -5,7 +5,7 @@ import type { BreakerState, EdgeSpec, Ms, NodeKind, Scenario, TrafficSpec } from
 import { Bulkhead } from "../policies/bulkhead";
 import { CircuitBreaker } from "../policies/circuit-breaker";
 import { compileFallback } from "../policies/fallback";
-import { attemptTimeoutMs } from "../policies/timeout";
+import { attemptTimeoutMs, backstopMs } from "../policies/timeout";
 import { type CallWorld, Invocation } from "./call-pipeline";
 import { FaultRegistry } from "./faults";
 import { type EdgeRuntime, NetworkLink } from "./network";
@@ -100,6 +100,15 @@ export class World implements CallWorld {
     return job;
   }
 
+  runOnPool(nodeId: string, task: () => void): "ran" | "queued" | "rejected" {
+    const node = this.node(nodeId);
+    if (node.runTimerTask === undefined) {
+      task();
+      return "ran";
+    }
+    return node.runTimerTask(task);
+  }
+
   cancelJob(job: Job): void {
     this.node(job.nodeId).cancel(job);
   }
@@ -158,6 +167,8 @@ export class World implements CallWorld {
       spec,
       series,
       timeoutMs: attemptTimeoutMs(spec, this.scenario.options?.defaultEdgeTimeoutMs),
+      timeoutEnforcement: spec.policies.timeout?.enforcement ?? "timer",
+      backstopMs: backstopMs(spec, this.scenario.options?.defaultEdgeTimeoutMs),
       breaker,
       bulkhead: bulkhead === undefined ? null : new Bulkhead(bulkhead),
       fallback:

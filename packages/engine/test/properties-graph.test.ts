@@ -13,7 +13,13 @@ import {
 const policiesArb: fc.Arbitrary<ClientPolicies> = fc
   .record(
     {
-      timeout: fc.record({ valueMs: fc.integer({ min: 5, max: 400 }) }),
+      timeout: fc.record(
+        {
+          valueMs: fc.integer({ min: 5, max: 400 }),
+          enforcement: fc.constantFrom("timer" as const, "caller-pool" as const),
+        },
+        { requiredKeys: ["valueMs"] },
+      ),
       retry: fc.record({
         maxRetries: fc.integer({ min: 0, max: 3 }),
         delayMs: fc.integer({ min: 0, max: 100 }),
