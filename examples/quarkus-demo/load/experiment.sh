@@ -20,5 +20,7 @@ node load/monitor.mjs "$label" 125 500 > "results/monitor-$label.log" 2>&1 &
 monitor=$!
 RUN_LABEL="$label" docker compose run --rm k6
 wait "$monitor"
-node "$cli" run "$scenario" --json > "results/fragor-$label.json"
+rate_args=()
+[ -n "${RATE:-}" ] && rate_args=(--set "traffic.web.pattern.rps=${RATE}")
+node "$cli" run "$scenario" --json "${rate_args[@]}" > "results/fragor-$label.json"
 node load/compare.mjs "results/timeline-$label.json" "results/fragor-$label.json" | tee "results/compare-$label.txt"

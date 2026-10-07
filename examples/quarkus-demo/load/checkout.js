@@ -7,6 +7,7 @@ import { Counter, Trend } from "k6/metrics";
 const GATEWAY = __ENV.GATEWAY_URL || "http://localhost:8080";
 const ADMIN = __ENV.ADMIN_URL || "http://localhost:8083";
 const LABEL = __ENV.RUN_LABEL || "run";
+const RATE = Number(__ENV.RATE || 100);
 
 const success = new Counter("roots_success");
 const degraded = new Counter("roots_degraded");
@@ -18,7 +19,7 @@ export const options = {
   scenarios: {
     load: {
       executor: "constant-arrival-rate",
-      rate: 100,
+      rate: RATE,
       timeUnit: "1s",
       duration: "60s",
       preAllocatedVUs: 1000,
@@ -74,6 +75,7 @@ export function handleSummary(data) {
   const ms = (stat) => `${Math.round(value(data, "roots_latency", stat))} ms`;
   const summary = {
     label: LABEL,
+    rate: RATE,
     roots,
     success: ok,
     degraded: deg,

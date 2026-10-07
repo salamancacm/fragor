@@ -55,6 +55,7 @@ services:
     environment:
       GATEWAY_URL: http://gateway:8080
       ADMIN_URL: http://external-payment:8083
+      RATE: ${RATE:-100}
       RUN_LABEL: ${RUN_LABEL:-${ORDER_PROFILE:-prod}}
     command: ["run", "--quiet", "/scripts/checkout.js"]
     depends_on: [gateway]
