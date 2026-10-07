@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { type Scenario, simulate } from "@fragor/engine";
 import { describe, expect, it } from "vitest";
 import { parseScenario, ScenarioValidationError, safeParseScenario } from "../src";
@@ -106,4 +108,14 @@ describe("parseScenario", () => {
       );
     }
   });
+});
+
+describe("Quarkus demo mirror scenarios", () => {
+  const dir = join(import.meta.dirname, "..", "..", "..", "examples", "quarkus-demo", "fragor");
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
+    it(`${file} is a valid scenario the engine runs`, () => {
+      const s = parseScenario(JSON.parse(readFileSync(join(dir, file), "utf8")));
+      expect(simulate(s).summary.roots).toBeGreaterThan(0);
+    });
+  }
 });

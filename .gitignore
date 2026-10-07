@@ -11,3 +11,5 @@ Thumbs.db
 out/
 next-env.d.ts
 .claude/launch.json
+target/
+examples/quarkus-demo/results/

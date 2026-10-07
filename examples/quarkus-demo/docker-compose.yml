@@ -1,0 +1,54 @@
+# Real services that mirror Fragor scenarios 01 (baseline) and 02 (ORDER_PROFILE=breaker).
+name: fragor-quarkus-demo
+
+x-service: &service
+  build:
+    context: .
+  restart: "no"
+
+services:
+  external-payment:
+    <<: *service
+    build: { context: ., args: { SERVICE: external-payment } }
+    ports: ["8083:8083"]
+
+  payment:
+    <<: *service
+    build: { context: ., args: { SERVICE: payment } }
+    environment:
+      QUARKUS_REST_CLIENT_EXTERNAL_URL: http://external-payment:8083
+      CONNECTION_POOL_SIZE: ${CONNECTION_POOL_SIZE:-1000}
+    depends_on: [external-payment]
+
+  order:
+    <<: *service
+    build: { context: ., args: { SERVICE: order } }
+    environment:
+      QUARKUS_REST_CLIENT_PAYMENT_URL: http://payment:8082
+      CONNECTION_POOL_SIZE: ${CONNECTION_POOL_SIZE:-1000}
+      # "prod" = scenario 01 (timeout + retry); "breaker" = scenario 02 (+ breaker + fallback)
+      QUARKUS_PROFILE: ${ORDER_PROFILE:-prod}
+    depends_on: [payment]
+
+  gateway:
+    <<: *service
+    build: { context: ., args: { SERVICE: gateway } }
+    ports: ["8080:8080"]
+    environment:
+      QUARKUS_REST_CLIENT_ORDER_URL: http://order:8081
+      CONNECTION_POOL_SIZE: ${CONNECTION_POOL_SIZE:-1000}
+    depends_on: [order]
+
+  # Load test: docker compose run --rm k6
+  k6:
+    image: grafana/k6:2.3.0
+    profiles: ["load"]
+    volumes:
+      - ./load:/scripts:ro
+      - ./results:/results
+    environment:
+      GATEWAY_URL: http://gateway:8080
+      ADMIN_URL: http://external-payment:8083
+      RUN_LABEL: ${ORDER_PROFILE:-prod}-pool${CONNECTION_POOL_SIZE:-1000}
+    command: ["run", "--quiet", "/scripts/checkout.js"]
+    depends_on: [gateway]
