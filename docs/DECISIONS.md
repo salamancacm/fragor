@@ -266,3 +266,16 @@ can be compared too (labels say which).
 - Web tests cover the pure logic (worker run loop and protocol, params to patches, graph layout,
   health colors, chart data). The UI itself was verified in a browser (dev server and static
   export).
+
+## 2026-10-07 — Real-services comparison: per-service probes and the @Timeout finding
+Context: the Quarkus demo disagreed with the model (success 72% real vs 49% model, p95 26 s vs
+2.3 s). Decision: instrument every demo service with a dependency-free probe (`GET /probe`, served on
+the Vert.x event loop) whose gauges match Fragor's definitions (waiting = queue depth, inService =
+busy workers, orphanedWork), plus `load/monitor.mjs`, `load/compare.mjs` and `load/experiment.sh` to
+compare real and model second by second. Result: the discrepancy comes from Quarkus/SmallRye, not
+from the engine: a synchronous `@Timeout` is enforced by a task submitted to the saturated worker
+pool, so it fires late or is lost. With the REST client `read-timeout` the model's assumption holds
+and model and reality agree (49.5% vs 48.9% success; 15,172 vs 15,271 requests to payment; 11,304 vs
+11,939 rejections). Alternatives considered: Micrometer/Prometheus (adds dependencies and its gauges
+do not map one to one to the model's quantities). Open: modeling late/lost timeouts in the engine
+(an option on the calling node: timeout enforcement through its own worker queue).

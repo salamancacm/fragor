@@ -58,46 +58,88 @@ Behind a TLS-intercepting proxy (for example Cloudflare WARP) Maven may fail wit
 Manual fault injection: `curl -X POST "localhost:8083/admin/latency?extraMs=5000"`, restore with
 `curl -X DELETE localhost:8083/admin/latency`.
 
-## What we found (2026-10-07, one run each, 24-CPU machine, Docker Desktop)
+## Measure and compare
 
-| | Fragor model | Real services |
-| --- | --- | --- |
-| Baseline: success / failed | 48.9% / 51.1% | 71.6% / 28.4% |
-| Baseline: p50 / p95 / p99 | 274 ms / 2.3 s / 2.4 s | 146 ms / 26.3 s / 27.8 s |
-| Breaker: success / degraded / failed | 39.3% / 60.8% / 0.0% | 38.3% / 33.4% / 28.3% |
-| Breaker: p50 / p95 / p99 | 280 ms / 656 ms / 2.3 s | 177 ms / 26.4 s / 27.9 s |
+Every service exposes `GET /probe` (served on the Vert.x event loop, so it answers even when all
+worker threads are busy) with the quantities the Fragor model uses: requests waiting for a thread
+(`waiting`, Fragor queue depth), running (`inService`, busy workers), still running after the caller
+closed the connection (`orphanedNow`; `orphanedWork` counts the finished ones), responses by status
+and outbound calls per target with a duration histogram. Order and gateway record each outbound call
+twice: per attempt (inside `@Timeout`) and per invocation (outside, retries included).
 
-The model and reality disagree a lot. That is the point of this demo: each disagreement is an
-assumption to understand. What has been checked so far:
+One command runs an experiment: it polls the probes every 500 ms, runs k6, runs the mirror scenario
+in Fragor and prints both side by side every 2 s, plus totals.
 
-**Confirmed to behave like the model**
-- One request during the fault takes 8.36 s and fails: four attempts of 2 s plus retry delays,
-  exactly what the model computes for `timeout 2000` + `maxRetries 3`.
-- `quarkus.thread-pool.queue-size` works like `queueLimit`: 300 concurrent requests to payment
-  (50 threads, queue 100) with the slow provider gave 50 + 50 + 50 served in FIFO waves and 150
-  immediate 503s.
-- CPU is not a factor: containers stayed under 12% CPU during the load.
+```bash
+(cd ../.. && pnpm build)                     # once: builds the Fragor CLI
+docker compose up -d --build
+load/experiment.sh my-run                    # results/compare-my-run.txt
+ORDER_PROFILE=breaker docker compose up -d order && ORDER_PROFILE=breaker load/experiment.sh my-breaker-run
+```
 
-**Found: a hidden bulkhead.** The Quarkus REST client has a connection pool of 50 connections per
-client by default (`quarkus.rest-client.connection-pool-size`, documented default 50). It limits
-concurrent calls to a dependency exactly like a bulkhead with a waiting queue, and the mirror model
-had no such limit: with the defaults, order processed payment calls in waves of exactly 50. The
-demo raises the pools to 1000 (`CONNECTION_POOL_SIZE`) so worker threads are the only limit, as in
-the model. Run with `CONNECTION_POOL_SIZE=50` to see the default. In Fragor this is modeled as a
-`bulkhead` (`value: 50` plus a `waitingTaskQueue`) on each edge.
+## What we found (2026-10-07, 24-CPU machine, Docker Desktop)
 
-**Still open (not explained yet)**
-- With pools raised, about 28% of requests still fail and the tail is around 26-28 s, close to the
-  30 s REST client read timeout, in both profiles. The logs show `RejectedExecutionException` at the
-  gateway (its queue of 1000 fills up) and at order: their threads stay busy far longer than the
-  model expects. Hypotheses to test next:
-  - a synchronous `@Timeout` interrupts the caller thread, but the blocked call may not return until
-    the response or the read timeout (the MicroProfile spec warns that interruption does not always
-    stop blocking I/O), so the thread is held longer than the model assumes;
-  - work queued in the Vert.x/HTTP layer before reaching the worker pool, outside `queue-size`;
-  - per-service metrics (Micrometer/Prometheus) are needed to see where the time goes.
-- k6 generates arrivals at a constant rate but drops iterations when it runs out of virtual users
-  (about 100 per run here), so the real arrival count is slightly lower than the model's.
+### Root cause of the discrepancy: `@Timeout` depends on the saturated worker pool
 
-Until these are understood, read the Fragor numbers as the behavior of the *model*, and use the
-differences to question your assumptions about the real system.
+With the default setup the model and reality disagreed (success 49% vs 72%, p95 2.3 s vs 26 s). The
+probes showed why: under saturation, order's attempts to payment lasted **5 to 20 s** although they
+are annotated `@Timeout(2000)`, and only 23 of 4260 attempts timed out. Payment never accumulated
+orphaned work, never rejected anything, and the congestion moved up to the gateway queue instead.
+
+The mechanism, verified in the source code:
+
+1. SmallRye's `Timeout` schedules the interruption on a timer:
+   `timer.schedule(timeoutInMillis, execution::timeoutAndInterrupt, ...)`
+   ([Timeout.java](https://github.com/smallrye/smallrye-fault-tolerance/blob/6.11.4/implementation/core/src/main/java/io/smallrye/faulttolerance/core/timeout/Timeout.java)).
+2. The timer is one thread that, when a task is due, **submits it to an executor**
+   ([ThreadTimer.java](https://github.com/smallrye/smallrye-fault-tolerance/blob/6.11.4/implementation/core/src/main/java/io/smallrye/faulttolerance/core/timer/ThreadTimer.java));
+   that executor is the async executor
+   ([ExecutorHolder.java](https://github.com/smallrye/smallrye-fault-tolerance/blob/6.11.4/implementation/fault-tolerance/src/main/java/io/smallrye/faulttolerance/ExecutorHolder.java): `new ThreadTimer(asyncExecutor)`).
+3. In Quarkus the async executor is the `ManagedExecutor`, i.e. the same worker pool that runs the
+   blocking REST endpoints
+   ([QuarkusAsyncExecutorProvider.java](https://github.com/quarkusio/quarkus/blob/3.40.1/extensions/smallrye-fault-tolerance/runtime/src/main/java/io/quarkus/smallrye/faulttolerance/runtime/QuarkusAsyncExecutorProvider.java)).
+
+So when the pool is saturated the timeout task waits in the queue behind requests (late timeout), and
+when the queue is full it is rejected and **the timeout is silently lost**. The order logs show it:
+`SRFTL11000: Unexpected exception in timer loop, ignoring: java.util.concurrent.RejectedExecutionException`
+from thread `SmallRye Fault Tolerance Timer 1`, raised by `EnhancedQueueExecutor.rejectQueueFull`.
+A single request on an idle system times out correctly (8.36 s = 4 attempts of 2 s + delays), which is
+why this only appears under load: exactly when the timeout is needed.
+
+### When the model's assumption holds, model and reality agree
+
+Fragor assumes a timeout fires on time. The Quarkus REST client `read-timeout` is enforced by Vert.x
+on the event loop, outside the worker pool, so setting it to the same values makes that assumption
+true (`ORDER_PAYMENT_READ_TIMEOUT=2000 GATEWAY_ORDER_READ_TIMEOUT=10000`):
+
+| | Fragor model | Real, `@Timeout` only | Real, `read-timeout` |
+| --- | --- | --- | --- |
+| Baseline: success / failed | 48.9% / 51.1% | 71.8% / 28.2% | 49.5% / 50.5% |
+| Baseline: p50 / p95 / p99 | 274 ms / 2.3 s / 2.4 s | 149 ms / 26.6 s / 28.0 s | 370 ms / 2.7 s / 4.3 s |
+| Baseline: requests reaching payment | 15,271 | 4,266 | 15,172 |
+| Baseline: 503 rejections at payment | 11,939 | 0 | 11,304 |
+| Baseline: orphaned work at payment | 400 | 0 | 300 |
+| Breaker: success / degraded / failed | 39.3% / 60.8% / 0% | 38.3% / 33.4% / 28.3% | 40.2% / 59.8% / 0% |
+| Breaker: p50 / p95 / p99 | 280 ms / 656 ms / 2.3 s | 177 ms / 26.4 s / 27.9 s | 277 ms / 612 ms / 2.3 s |
+| Breaker: requests reaching payment | 2,459 | not measured | 2,516 |
+
+(The `@Timeout`-only breaker run predates the probes; its row comes from the k6 summary.)
+
+Remaining differences with `read-timeout`, all small: payment's waiting queue stays around 50
+instead of the model's 100, the real system oscillates in waves of a few seconds where the model is
+smoother, and the real tail (p99 4.3 s vs 2.4 s) is longer.
+
+### Lessons
+
+- In Quarkus, a synchronous `@Timeout` **does not protect a saturated service**: its interruption
+  runs on the very pool that is saturated. Set the REST client `read-timeout` (event loop) as well,
+  and keep the worker queue bounded so overload fails fast.
+- The Quarkus REST client has a **hidden bulkhead**: 50 connections per client by default
+  (`quarkus.rest-client.connection-pool-size`). This demo raises it to 1000 (`CONNECTION_POOL_SIZE`)
+  to match the model; with the default, calls to a dependency are served in waves of 50. In Fragor,
+  model it as a `bulkhead` with `value: 50` and a `waitingTaskQueue`.
+- `quarkus.thread-pool.queue-size` behaves like Fragor's `queueLimit`: 300 concurrent requests to
+  payment (50 threads, queue 100) gave 50 + 50 + 50 served in FIFO waves and 150 immediate 503s.
+
+Fragor does not model the first point yet: it assumes timeouts fire on time. Read the model as the
+behavior of a system whose timeouts are enforced independently of its worker pool.

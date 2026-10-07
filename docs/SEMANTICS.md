@@ -110,6 +110,16 @@ Test paths are relative to `packages/engine/test/`.
   Cancelled work never replies and is not counted as orphaned. Test: `timeout-orphans.test.ts`.
 - A lost response (packet loss) after the job finished is not orphaned work: the work ended
   before the caller gave up. Test: `network-faults.test.ts`.
+- **Model assumption: a timeout fires on time.** Verified on 2026-10-07 against real services
+  (examples/quarkus-demo) that this does **not** hold for a synchronous SmallRye `@Timeout` in Quarkus
+  when the worker pool is saturated: the interruption is scheduled on SmallRye's timer, which submits
+  it to the async executor (`new ThreadTimer(asyncExecutor)` in
+  [ExecutorHolder.java](https://github.com/smallrye/smallrye-fault-tolerance/blob/6.11.4/implementation/fault-tolerance/src/main/java/io/smallrye/faulttolerance/ExecutorHolder.java)),
+  and Quarkus provides its worker pool as that executor
+  ([QuarkusAsyncExecutorProvider.java](https://github.com/quarkusio/quarkus/blob/3.40.1/extensions/smallrye-fault-tolerance/runtime/src/main/java/io/quarkus/smallrye/faulttolerance/runtime/QuarkusAsyncExecutorProvider.java)).
+  Saturated pool: late timeouts; full queue: the timer task is rejected and the timeout is lost.
+  With the REST client `read-timeout` (enforced on the Vert.x event loop) the assumption holds and
+  the real services matched the model closely. Fragor does not model the late or lost timeout yet.
 
 ## 6.6 Retry — verified
 
