@@ -163,3 +163,48 @@ were lost because Order Service had no free worker".
 To compare a real run with the right mirror, `load/experiment.sh` picks `fragor/baseline.json` or
 `fragor/breaker.json`; for runs with `ORDER_PAYMENT_READ_TIMEOUT` / `GATEWAY_ORDER_READ_TIMEOUT`
 set, it picks the `*-read-timeout.json` variants.
+
+## Validation across loads and seeds (2026-10-07)
+
+`load/validate.sh` runs the real services at 50, 100 and 150 rps, with both timeout
+configurations, three times each (18 runs, every service restarted before each run).
+`load/validation-report.mjs` compares them with the mirror scenario at the same load over 10 seeds:
+mean (min–max) on each side, and the gap between the means.
+
+```bash
+load/validate.sh 3 "50 100 150"          # about 25 minutes
+node load/validation-report.mjs 10        # writes results/validation.md
+```
+
+Results (gap = Fragor mean minus real mean):
+
+| Configuration | Load | Success: real / Fragor | Gap | p95: real / Fragor | p99: real / Fragor |
+| --- | --- | --- | --- | --- | --- |
+| `@Timeout` (caller-pool) | 50 rps | 89.5% / 89.4% | −0.2 pp | 23.8 s / 23.8 s | 26.1 s / 26.0 s |
+| `@Timeout` (caller-pool) | 100 rps | 71.7% / 70.5% | −1.2 pp | 26.6 s / 26.6 s | 28.0 s / 28.0 s |
+| `@Timeout` (caller-pool) | 150 rps | 65.9% / 64.3% | −1.6 pp | 27.8 s / 27.8 s | 29.0 s / 28.9 s |
+| read-timeout (timer) | 50 rps | 49.4% / 48.9% | −0.5 pp | 4.3 s / 2.3 s | 4.4 s / 4.3 s |
+| read-timeout (timer) | 100 rps | 49.3% / 48.9% | −0.4 pp | 2.8 s / 2.3 s | 4.4 s / 2.4 s |
+| read-timeout (timer) | 150 rps | 57.2% / 48.9% | −8.3 pp | 5.8 s / 2.3 s | 7.2 s / 3.2 s |
+
+Real runs were very repeatable (success varied by at most 0.3 points between repetitions) and so
+were the seeds (at most 0.5 points), so the gaps are systematic, not noise.
+
+What this says:
+
+- **`@Timeout` (caller-pool): the model holds at every load.** Success within 1.6 points,
+  p50/p95/p99 within a few tens of milliseconds.
+- **read-timeout, 50 and 100 rps: outcomes hold, tails do not.** Success within 0.5 points, but the
+  model underestimates the slowest requests (p95 at 50 rps, p99 at 100 rps: about 2 s shorter).
+- **read-timeout, 150 rps: the model is off** (success 49% vs 57%, p50 0.3 s vs 2.2 s).
+
+The probes explain the 150 rps gap. In the model payment keeps its queue full and rejects at once;
+in reality its queue empties in bursts and order's threads stay busy longer. A direct test found
+why: with the provider slow, 300 concurrent requests to payment (50 threads, queue 100) from a
+client that gives up after 2 s gave 150 immediate 503s, 50 requests that kept running after the
+client left (orphaned work, as in the model) and **100 queued requests that were discarded without
+running**: the external provider received 50 calls, not 150. When the caller closes the connection,
+Quarkus does not run the work still waiting in the queue. Fragor's default runs it (orphaned), and
+`cancelOnTimeout` drops it but also stops the work already running, which does not happen here.
+Neither matches; modeling "queued work of a departed caller is dropped, running work continues"
+is the next step for this configuration.

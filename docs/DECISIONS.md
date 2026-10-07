@@ -293,3 +293,15 @@ reproduces both real configurations (70.5% vs 71.8% success with @Timeout; 48.9%
 read-timeout). Alternatives: a node-level flag (less precise: the same service can use both kinds of
 timeouts), modeling every SmallRye timer use (retry delays and breaker transitions are not affected
 in synchronous mode).
+
+## 2026-10-07 — Validation across loads and seeds
+Context: the timeout-enforcement validation rested on one run per configuration. Decision: add a
+repeatable matrix (`examples/quarkus-demo/load/validate.sh`: 3 loads x 2 timeout configurations x 3
+runs, services restarted between runs) and a report against the mirror scenario over 10 seeds
+(`load/validation-report.mjs`). Result: with `@Timeout` (caller-pool) the model holds at 50, 100 and
+150 rps (success within 1.6 points, latency percentiles within tens of ms). With the read-timeout
+(timer) outcomes hold at 50 and 100 rps but the model underestimates tail latency by about 2 s, and
+at 150 rps it is off by 8 points. Cause found with the probes: when a caller closes the connection,
+Quarkus drops the request still queued at the server but keeps running the one already in progress;
+Fragor has no such mode (default: queued work runs; cancelOnTimeout: both are cancelled). Open:
+model "drop queued work of a departed caller" and re-validate.
