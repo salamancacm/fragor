@@ -6,6 +6,7 @@ export type FindingRule =
   | "retry-amplification"
   | "orphaned-work"
   | "missing-timeout"
+  | "timeout-starvation"
   | "single-point-of-failure";
 
 export type Severity = "critical" | "warning" | "info";

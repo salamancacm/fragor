@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { type Scenario, type SimulationResult, simulate } from "@fragor/engine";
 import { describe, expect, it } from "vitest";
 import {
@@ -141,5 +143,27 @@ describe("buildAnalysisDigest", () => {
     );
     const times = d.timeline.map((e) => e.tMs);
     expect(times).toEqual([...times].sort((a, b) => a - b));
+  });
+});
+
+describe("timeout-starvation", () => {
+  const mirror = (file: string) => {
+    const dir = join(import.meta.dirname, "..", "..", "..", "examples", "quarkus-demo", "fragor");
+    const scenario = parseScenario(JSON.parse(readFileSync(join(dir, file), "utf8")));
+    return deriveFindings(scenario, simulate(scenario));
+  };
+
+  it("fires when a caller-pool timeout runs late or is lost", () => {
+    const f = mirror("baseline.json").find((x) => x.id === "timeout-starvation:order-payment");
+    expect(f?.severity).toBe("critical");
+    expect(f?.evidence.map((e) => e.metric)).toEqual(
+      expect.arrayContaining(["timeoutsDelayed", "timeoutsLost"]),
+    );
+  });
+
+  it("does not fire when timeouts are enforced on time", () => {
+    expect(mirror("baseline-read-timeout.json").some((x) => x.rule === "timeout-starvation")).toBe(
+      false,
+    );
   });
 });

@@ -95,7 +95,15 @@ const failureKindSchema = z
   ) satisfies z.ZodType<FailureKind>;
 
 const timeoutSchema = z
-  .strictObject({ valueMs: positiveMs("Attempt timeout") })
+  .strictObject({
+    valueMs: positiveMs("Attempt timeout"),
+    enforcement: z
+      .enum(["timer", "caller-pool"])
+      .describe(
+        "Who enforces the deadline. 'timer' (default): it fires on time, like the Quarkus REST client read-timeout (Vert.x event loop). 'caller-pool': the interruption runs on the worker pool of the calling node, like a synchronous SmallRye @Timeout in Quarkus: late when the pool is busy, lost when its queue is full; options.defaultEdgeTimeoutMs still applies as a backstop.",
+      )
+      .exactOptional(),
+  })
   .describe(
     "@Timeout: fail an attempt with `timeout` after valueMs.",
   ) satisfies z.ZodType<TimeoutPolicy>;

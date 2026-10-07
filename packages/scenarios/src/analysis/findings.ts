@@ -1,7 +1,12 @@
 import type { Scenario, SimulationResult } from "@fragor/engine";
 import { singlePointOfFailure } from "./rules-graph";
 import { cascadePropagation, saturationWindows, workerSaturation } from "./rules-load";
-import { missingTimeout, orphanedWork, retryAmplification } from "./rules-policies";
+import {
+  missingTimeout,
+  orphanedWork,
+  retryAmplification,
+  timeoutStarvation,
+} from "./rules-policies";
 import {
   DEFAULT_THRESHOLDS,
   type Finding,
@@ -16,8 +21,9 @@ const RULE_ORDER: Record<FindingRule, number> = {
   "worker-saturation": 1,
   "retry-amplification": 2,
   "orphaned-work": 3,
-  "missing-timeout": 4,
-  "single-point-of-failure": 5,
+  "timeout-starvation": 4,
+  "missing-timeout": 5,
+  "single-point-of-failure": 6,
 };
 
 /**
@@ -36,6 +42,7 @@ export function deriveFindings(
     ...workerSaturation(scenario, result, saturated),
     ...retryAmplification(scenario, result, t),
     ...orphanedWork(scenario, result, t),
+    ...timeoutStarvation(scenario, result),
     ...missingTimeout(scenario, result, t),
     ...singlePointOfFailure(scenario, result, saturated),
   ];

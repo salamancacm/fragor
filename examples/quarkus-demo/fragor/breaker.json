@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "name": "quarkus-demo-breaker",
-  "description": "Mirror of examples/quarkus-demo with ORDER_PROFILE=breaker: the baseline plus a circuit breaker and a degraded fallback on order-payment.",
+  "description": "Mirror of examples/quarkus-demo with ORDER_PROFILE=breaker: the baseline plus a circuit breaker and a degraded fallback on order-payment. Timeouts are synchronous SmallRye @Timeout: enforced on the caller's worker pool (enforcement caller-pool), with the 30 s REST client read timeout as backstop.",
   "seed": 42,
   "durationMs": 60000,
   "metrics": {
@@ -91,7 +91,8 @@
       "packetLoss": 0,
       "policies": {
         "timeout": {
-          "valueMs": 10000
+          "valueMs": 10000,
+          "enforcement": "caller-pool"
         }
       }
     },
@@ -106,7 +107,8 @@
       "packetLoss": 0,
       "policies": {
         "timeout": {
-          "valueMs": 2000
+          "valueMs": 2000,
+          "enforcement": "caller-pool"
         },
         "retry": {
           "maxRetries": 3,

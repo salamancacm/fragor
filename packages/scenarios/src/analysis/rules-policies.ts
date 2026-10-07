@@ -156,3 +156,50 @@ export function missingTimeout(
   }
   return findings;
 }
+
+/**
+ * "caller-pool" timeouts that ran late or were lost because the caller's worker pool was saturated:
+ * the timeout stops protecting the service exactly when it is overloaded.
+ */
+export function timeoutStarvation(scenario: Scenario, result: SimulationResult): Finding[] {
+  const { bucketMs } = result.series;
+  const names = new Map(scenario.nodes.map((n) => [n.id, n.name]));
+  const findings: Finding[] = [];
+  for (const edge of scenario.edges) {
+    const series = result.series.edges[edge.id];
+    if (series === undefined) continue;
+    const delayed = sum(series.timeoutsDelayed);
+    const lost = sum(series.timeoutsLost);
+    if (delayed + lost === 0) continue;
+    const both = series.timeoutsDelayed.map((d, i) => d + (series.timeoutsLost[i] ?? 0));
+    const w = activeWindow(both);
+    const span =
+      w === null ? { fromMs: 0, toMs: result.series.buckets * bucketMs } : toMs(w, bucketMs);
+    const evidence: Evidence[] = [
+      { edgeId: edge.id, ...span, metric: "timeoutsDelayed", value: delayed },
+      { edgeId: edge.id, ...span, metric: "timeoutsLost", value: lost },
+    ];
+    const util = result.series.nodes[edge.from]?.utilization ?? [];
+    if (w !== null) {
+      evidence.push({
+        nodeId: edge.from,
+        ...span,
+        metric: "utilization",
+        value: round(maxOf(util, w) ?? 0, 3),
+      });
+    }
+    const caller = names.get(edge.from) ?? edge.from;
+    findings.push({
+      id: `timeout-starvation:${edge.id}`,
+      rule: "timeout-starvation",
+      severity: lost > 0 ? "critical" : "warning",
+      title: `Timeouts on ${edge.from} -> ${edge.to} waited for a free worker`,
+      summary:
+        `${delayed} timeouts ran late and ${lost} were lost because ${caller} had no free worker: ` +
+        `the timeout is enforced on the caller's own worker pool (like a synchronous @Timeout in Quarkus). ` +
+        `A timeout enforced outside the pool (REST client read-timeout) is not affected.`,
+      evidence,
+    });
+  }
+  return findings;
+}

@@ -66,6 +66,8 @@ export interface AnalysisDigest {
     circuitOpen: number;
     bulkheadFull: number;
     fallbacks: number;
+    timeoutsDelayed: number;
+    timeoutsLost: number;
     failed: number;
     breakerOpenMs: number | null;
   }[];
@@ -180,6 +182,8 @@ export function buildAnalysisDigest(
         circuitOpen: sum(x?.circuitOpen ?? []),
         bulkheadFull: sum(x?.bulkheadFull ?? []),
         fallbacks: sum(x?.fallbacks ?? []),
+        timeoutsDelayed: sum(x?.timeoutsDelayed ?? []),
+        timeoutsLost: sum(x?.timeoutsLost ?? []),
         failed: sum(x?.failed ?? []),
         breakerOpenMs: open,
       };
