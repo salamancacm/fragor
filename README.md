@@ -42,6 +42,8 @@ Canonical scenarios are described in [docs/SCENARIOS.md](docs/SCENARIOS.md).
 
 ## Try it
 
+The full guide is [docs/USAGE.md](docs/USAGE.md). In short:
+
 ```bash
 pnpm install
 pnpm build
@@ -64,6 +66,12 @@ pnpm build        # CLI bundle + static site in apps/web/out
 Pick a canonical scenario, run it, change timeouts, retries, circuit breakers or traffic, and run
 again: every chart and number is compared with the previous run. The simulation runs in a Web Worker
 in your browser; the site is static and sends nothing anywhere.
+
+## Real services
+
+`examples/quarkus-demo` has real Quarkus services that mirror scenarios 01/02, a k6 load test and
+the mirror Fragor scenarios, to compare the model with reality. See its
+[README](examples/quarkus-demo/README.md).
 
 ## Development
 
