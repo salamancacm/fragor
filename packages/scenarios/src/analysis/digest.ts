@@ -34,6 +34,7 @@ export interface AnalysisDigest {
     timeouts: number;
     rejected503: number;
     orphanedWork: number;
+    discardedWork: number;
   };
   byTraffic: {
     id: string;
@@ -53,6 +54,7 @@ export interface AnalysisDigest {
     rejected503: number;
     failed: number;
     orphanedWork: number;
+    discardedWork: number;
     maxP99Ms: number | null;
   }[];
   edges: {
@@ -131,6 +133,7 @@ export function buildAnalysisDigest(
       timeouts: s.timeouts,
       rejected503: s.rejected503,
       orphanedWork: s.orphanedWork,
+      discardedWork: s.discardedWork,
     },
     byTraffic: scenario.traffic.map((t) => {
       const x = s.byTraffic[t.id];
@@ -160,6 +163,7 @@ export function buildAnalysisDigest(
         rejected503: sum(x?.rejected503 ?? []),
         failed: sum(x?.failed ?? []),
         orphanedWork: sum(x?.orphanedWork ?? []),
+        discardedWork: sum(x?.discardedWork ?? []),
         maxP99Ms: r(maxOf(x?.p99Ms ?? [])),
       };
     }),

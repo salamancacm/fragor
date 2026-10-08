@@ -66,6 +66,7 @@ export function formatRun(
         `${s.circuitOpen} / ${s.bulkheadFull} / ${s.fallbacks}`,
       ],
       ["Orphaned work / responses", `${s.orphanedWork} / ${s.orphanedResponses}`],
+      ["Discarded queued work", String(s.discardedWork)],
     ]),
     `Failure reasons (root cause): ${reasons === "" ? "none" : reasons}`,
     "",
