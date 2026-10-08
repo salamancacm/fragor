@@ -1,9 +1,12 @@
 {
   "schemaVersion": 1,
   "name": "quarkus-demo-baseline-read-timeout",
-  "description": "Mirror of examples/quarkus-demo run with ORDER_PAYMENT_READ_TIMEOUT=2000 and GATEWAY_ORDER_READ_TIMEOUT=10000 with the default profile: same workers, queues, service times, policies and fault as the real services; constant 100 rps like the k6 load test. Timeouts enforced on time (REST client read-timeout).",
+  "description": "Mirror of examples/quarkus-demo run with ORDER_PAYMENT_READ_TIMEOUT=2000 and GATEWAY_ORDER_READ_TIMEOUT=10000 with the default profile: same workers, queues, service times, policies and fault as the real services (Quarkus discards the queued work of a caller that closed the connection); constant 100 rps like the k6 load test. Timeouts enforced on time (REST client read-timeout).",
   "seed": 42,
   "durationMs": 60000,
+  "options": {
+    "abandonedWork": "drop-queued"
+  },
   "metrics": {
     "bucketMs": 1000
   },

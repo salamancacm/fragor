@@ -148,7 +148,8 @@ Test paths are relative to `packages/engine/test/`.
   - Validation (examples/quarkus-demo, mirror scenarios in `examples/quarkus-demo/fragor`): with
     `@Timeout` the real services gave 71.8% success, p95 26.6 s, 1,664 gateway rejections and 4,266
     requests to payment; the model with `"caller-pool"` gives 70.5%, 26.6 s, 1,772 and 4,250. With
-    the read-timeout the real services gave 49.5% and the model with `"timer"` 48.9%. Across
+    the read-timeout the real services gave 49.5% and the model with `"timer"` 48.9% (49.3% once
+    `abandonedWork: "drop-queued"` was added, 2026-10-08). Across
     loads and seeds see examples/quarkus-demo/README.md ("Validation across loads and seeds").
   Tests: `timeout-enforcement.test.ts`, `properties-graph.test.ts`.
 

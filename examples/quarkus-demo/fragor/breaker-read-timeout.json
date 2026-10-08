@@ -1,9 +1,12 @@
 {
   "schemaVersion": 1,
   "name": "quarkus-demo-breaker-read-timeout",
-  "description": "Mirror of examples/quarkus-demo run with ORDER_PAYMENT_READ_TIMEOUT=2000 and GATEWAY_ORDER_READ_TIMEOUT=10000 with ORDER_PROFILE=breaker: the baseline plus a circuit breaker and a degraded fallback on order-payment. Timeouts enforced on time (REST client read-timeout).",
+  "description": "Mirror of examples/quarkus-demo run with ORDER_PAYMENT_READ_TIMEOUT=2000 and GATEWAY_ORDER_READ_TIMEOUT=10000 with ORDER_PROFILE=breaker: the baseline plus a circuit breaker and a degraded fallback on order-payment; queued work of a caller that closed the connection is discarded, as Quarkus does. Timeouts enforced on time (REST client read-timeout).",
   "seed": 42,
   "durationMs": 60000,
+  "options": {
+    "abandonedWork": "drop-queued"
+  },
   "metrics": {
     "bucketMs": 1000
   },

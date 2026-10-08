@@ -1,9 +1,12 @@
 {
   "schemaVersion": 1,
   "name": "quarkus-demo-baseline",
-  "description": "Mirror of examples/quarkus-demo with the default profile: same workers, queues, service times, policies and fault as the real services; constant 100 rps like the k6 load test. Timeouts are synchronous SmallRye @Timeout: enforced on the caller's worker pool (enforcement caller-pool), with the 30 s REST client read timeout as backstop.",
+  "description": "Mirror of examples/quarkus-demo with the default profile: same workers, queues, service times, policies and fault as the real services (Quarkus discards the queued work of a caller that closed the connection); constant 100 rps like the k6 load test. Timeouts are synchronous SmallRye @Timeout: enforced on the caller's worker pool (enforcement caller-pool), with the 30 s REST client read timeout as backstop.",
   "seed": 42,
   "durationMs": 60000,
+  "options": {
+    "abandonedWork": "drop-queued"
+  },
   "metrics": {
     "bucketMs": 1000
   },
