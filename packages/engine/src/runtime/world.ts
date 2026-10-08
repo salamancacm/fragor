@@ -1,7 +1,15 @@
 import { createStream } from "../core/rng";
 import type { MetricsCollector } from "../metrics/collector";
 import { openChildSpan, type SpanRef } from "../metrics/traces";
-import type { BreakerState, EdgeSpec, Ms, NodeKind, Scenario, TrafficSpec } from "../model/types";
+import type {
+  AbandonedWorkMode,
+  BreakerState,
+  EdgeSpec,
+  Ms,
+  NodeKind,
+  Scenario,
+  TrafficSpec,
+} from "../model/types";
 import { Bulkhead } from "../policies/bulkhead";
 import { CircuitBreaker } from "../policies/circuit-breaker";
 import { compileFallback } from "../policies/fallback";
@@ -32,6 +40,7 @@ export class World implements CallWorld {
   readonly edges = new Map<string, EdgeRuntime>();
   readonly faults: FaultRegistry;
   readonly cancelOnTimeout: boolean;
+  readonly abandonedWork: AbandonedWorkMode;
   readonly global;
   private jobSeq = 0;
 
@@ -43,7 +52,8 @@ export class World implements CallWorld {
     readonly events: WorldEvents,
   ) {
     this.global = metrics.global;
-    this.cancelOnTimeout = scenario.options?.cancelOnTimeout ?? false;
+    this.abandonedWork = abandonedWorkMode(scenario);
+    this.cancelOnTimeout = this.abandonedWork === "cancel";
     this.faults = new FaultRegistry(scenario.faults, scheduler, (id, phase, tMs) =>
       events.faults.push({ tMs, id, phase }),
     );
@@ -143,6 +153,7 @@ export class World implements CallWorld {
       global: this.metrics.global,
       stream: (purpose) => createStream(seed, "node", nodeId, purpose),
       faults: () => this.faults.node(nodeId),
+      dropAbandonedQueued: this.abandonedWork === "drop-queued",
       invoke: (edgeId, parent, done) => {
         const edge = this.edges.get(edgeId);
         if (edge === undefined) throw new Error(`unknown edge "${edgeId}"`);
@@ -186,4 +197,9 @@ export class World implements CallWorld {
       inFlight: 0,
     };
   }
+}
+
+function abandonedWorkMode(scenario: Scenario): AbandonedWorkMode {
+  const o = scenario.options;
+  return o?.abandonedWork ?? (o?.cancelOnTimeout === true ? "cancel" : "continue");
 }

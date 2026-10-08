@@ -46,6 +46,7 @@ export function buildSummary(
     fallbacks: sumOver(metrics.edges, "fallbacks"),
     timeoutsDelayed: sumOver(metrics.edges, "timeoutsDelayed"),
     timeoutsLost: sumOver(metrics.edges, "timeoutsLost"),
+    discardedWork: sumOver(metrics.nodes, "discardedWork"),
     byTraffic: roots.byTraffic,
   };
 }

@@ -79,7 +79,8 @@ SERVICE_DONE          error draw -> 500, or run calls in sequence (async: releas
 ARRIVE_AT_NODE        world.deliver(target) -> node.arrive(job)
 job.reply             response leg (may be lost) -> RESPONSE_AT_CALLER
 RESPONSE_AT_CALLER    attempt already timed out? orphanedResponses : resolve attempt
-TIMEOUT_FIRED         attempt fails with timeout; server job marked orphaned (or cancelled)
+TIMEOUT_FIRED         attempt fails with timeout; server job marked orphaned (or cancelled);
+                      with "drop-queued" an orphaned job is discarded when dequeued
 resolve attempt       breaker.record -> retry? RETRY_DUE : fallback? FALLBACK_DONE : done
 BREAKER_HALF_OPEN_DUE OPEN -> HALF_OPEN after delayMs
 FAULT_START/END       FaultRegistry updates combined effects and notifies subscribers
@@ -141,13 +142,14 @@ interface NodeContext {               // services available to a behavior
   readonly global: SeriesBuilder;     // global series (shared counters)
   stream(purpose: string): Rng;       // independent RNG sub-stream of this node
   faults(): NodeEffects;              // combined effect of active faults on this node
+  readonly dropAbandonedQueued: boolean;  // abandonedWork "drop-queued": skip orphaned queued jobs
   invoke(edgeId, parent, done): InvocationHandle;  // call a dependency through the client policies
 }
 
 interface NodeBehavior {
   readonly spec: NodeSpec;
   arrive(job: Job): void;             // admission, processing and reply are up to the node
-  cancel(job: Job): void;             // caller cancelled (cancelOnTimeout); must not reply
+  cancel(job: Job): void;             // caller cancelled (abandonedWork "cancel"); must not reply
   onFaultsChanged(): void;            // capacity / latency / error faults changed
   snapshot(): NodeSnapshot;
 }

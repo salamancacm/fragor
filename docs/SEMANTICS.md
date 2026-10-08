@@ -108,6 +108,18 @@ Test paths are relative to `packages/engine/test/`.
     waiting slot is freed immediately;
   - a request still on the wire is dropped when it arrives.
   Cancelled work never replies and is not counted as orphaned. Test: `timeout-orphans.test.ts`.
+  `options.abandonedWork: "cancel"` is the same mode; `"continue"` is the default above.
+- `options.abandonedWork: "drop-queued"` — **observed on real services (2026-10-08), mechanism
+  UNVERIFIED**: when the caller times out, work still waiting in the server's queue is discarded
+  when a worker reaches it (it takes no worker time and never replies, counted as `discardedWork`).
+  Work already running goes on as orphaned work, including its downstream calls. A discarded
+  request keeps its queue slot until a worker reaches it (design choice, UNVERIFIED: whether
+  Quarkus frees the slot when the connection closes was not observed separately). Observed in
+  examples/quarkus-demo with the payment provider slow: 300 concurrent requests to payment
+  (50 worker threads, queue 100) from a client with a 2 s read timeout gave 150 immediate 503s,
+  50 requests that kept running after the client left and 100 queued requests that never ran (the
+  provider received 50 calls). Which Quarkus component skips them was not traced in the source.
+  The mirror scenarios use this mode; see the validation below. Test: `abandoned-work.test.ts`.
 - A lost response (packet loss) after the job finished is not orphaned work: the work ended
   before the caller gave up. Test: `network-faults.test.ts`.
 - **Timeout enforcement — verified against real services (2026-10-07).** `timeout.enforcement`:
@@ -136,7 +148,8 @@ Test paths are relative to `packages/engine/test/`.
   - Validation (examples/quarkus-demo, mirror scenarios in `examples/quarkus-demo/fragor`): with
     `@Timeout` the real services gave 71.8% success, p95 26.6 s, 1,664 gateway rejections and 4,266
     requests to payment; the model with `"caller-pool"` gives 70.5%, 26.6 s, 1,772 and 4,250. With
-    the read-timeout the real services gave 49.5% and the model with `"timer"` 48.9%.
+    the read-timeout the real services gave 49.5% and the model with `"timer"` 48.9%. Across
+    loads and seeds see examples/quarkus-demo/README.md ("Validation across loads and seeds").
   Tests: `timeout-enforcement.test.ts`, `properties-graph.test.ts`.
 
 ## 6.6 Retry — verified

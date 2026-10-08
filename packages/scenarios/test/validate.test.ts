@@ -66,6 +66,16 @@ describe("parseScenario", () => {
     ]);
   });
 
+  it("checks abandonedWork against cancelOnTimeout", () => {
+    const s = base();
+    s.options = { ...s.options, abandonedWork: "drop-queued" };
+    expect(safeParseScenario(s).ok).toBe(true);
+    s.options = { ...s.options, cancelOnTimeout: true };
+    expect(issuesOf(s)).toEqual([
+      'options.abandonedWork: "drop-queued" contradicts cancelOnTimeout: true',
+    ]);
+  });
+
   it("checks relations between numbers", () => {
     const s = base();
     (s.nodes[1] as Scenario["nodes"][0]).serviceTime = { type: "lognormal", p50Ms: 50, p99Ms: 10 };

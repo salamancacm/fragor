@@ -168,9 +168,19 @@ export interface FaultSpec {
   effect: FaultEffect;
 }
 
+/**
+ * What a server does with the work of a caller that timed out (Fragor modeling extension).
+ * "continue" (default): all of it runs to the end (orphaned work). "drop-queued": work still
+ * waiting in the server's queue is discarded when a worker reaches it, work already running goes on
+ * (observed in Quarkus when the client closes the connection). "cancel": both are cancelled.
+ */
+export type AbandonedWorkMode = "continue" | "drop-queued" | "cancel";
+
 export interface ScenarioOptions {
-  /** Default false: the server keeps working after a caller timeout (orphaned work). */
+  /** Same as abandonedWork "cancel" when true; kept for compatibility. Default false. */
   cancelOnTimeout?: boolean;
+  /** Default "continue" ("cancel" when cancelOnTimeout is true). */
+  abandonedWork?: AbandonedWorkMode;
   /** Default 30000. */
   defaultEdgeTimeoutMs?: Ms;
   /** Extra time after durationMs to finish in-flight work. Default 60000. */
@@ -263,6 +273,8 @@ export interface Series {
   timeoutsDelayed: number[];
   /** "caller-pool" timeouts lost because the caller's queue was full. */
   timeoutsLost: number[];
+  /** Queued requests discarded because their caller had left (abandonedWork "drop-queued"). */
+  discardedWork: number[];
   queueDepthAvg: number[] | null;
   queueDepthMax: number[] | null;
   utilization: number[] | null;
@@ -286,7 +298,7 @@ export interface TraceSpan {
   attempt: number | null;
   /** Job spans: the caller timed out but the work went on. Attempt spans: response arrived late. */
   orphaned: boolean;
-  /** Work or attempt cancelled because of options.cancelOnTimeout. */
+  /** Work or attempt cancelled (abandonedWork "cancel"), or queued work discarded ("drop-queued"). */
   cancelled: boolean;
 }
 
@@ -327,6 +339,7 @@ export interface SimulationSummary {
   fallbacks: number;
   timeoutsDelayed: number;
   timeoutsLost: number;
+  discardedWork: number;
   /** Outcomes per traffic source id. */
   byTraffic: Record<string, TrafficSummary>;
 }

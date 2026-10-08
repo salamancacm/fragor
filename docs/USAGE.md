@@ -108,6 +108,11 @@ late or is lost when that pool is saturated. Model it with
 caller's pool*). The REST client `read-timeout` fires on time: keep the default `"timer"`. The
 finding `timeout-starvation` tells you when this matters.
 
+**What happens to the work of a caller that gave up** is set by `options.abandonedWork`:
+`"continue"` (default: everything runs, counted as orphaned work), `"drop-queued"` (work still
+queued at the server is discarded, running work goes on: what Quarkus does when the client closes
+the connection; discarded requests are counted as `discardedWork`) or `"cancel"` (both stop).
+
 How each rule works, and which framework documentation it follows, is in
 [SEMANTICS.md](SEMANTICS.md).
 

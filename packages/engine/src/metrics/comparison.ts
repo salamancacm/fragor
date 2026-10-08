@@ -138,6 +138,13 @@ const METRICS: readonly MetricDef[] = [
     read: (s) => s.orphanedWork,
   },
   {
+    key: "discardedWork",
+    label: "Discarded work",
+    unit: "count",
+    betterWhen: "neither",
+    read: (s) => s.discardedWork,
+  },
+  {
     key: "orphanedResponses",
     label: "Orphaned responses",
     unit: "count",

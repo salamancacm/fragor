@@ -220,6 +220,16 @@ export class ServiceNode implements NodeBehavior {
     this.startNext();
   }
 
+  /** Queued work whose caller left: it never runs and takes no worker time (drop-queued). */
+  private discard(w: Work): void {
+    this.ctx.series.inc("discardedWork");
+    this.ctx.global.inc("discardedWork");
+    this.work.delete(w.job.id);
+    this.completed++; // it left the node, like cancelled work
+    flagSpan(w.job.span, "cancelled");
+    closeSpan(w.job.span, this.now, "failed", null);
+  }
+
   /** Cancelled work leaves without replying. */
   private drop(w: Work): void {
     this.leave(w);
@@ -258,6 +268,10 @@ export class ServiceNode implements NodeBehavior {
       }
       this.queuedJobs--;
       this.ctx.series.setQueueDepth(this.now, this.queuedJobs);
+      if (next.job.orphaned && this.ctx.dropAbandonedQueued) {
+        this.discard(next);
+        continue;
+      }
       this.start(next);
     }
   }

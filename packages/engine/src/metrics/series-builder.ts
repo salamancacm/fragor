@@ -16,7 +16,8 @@ export type CounterField =
   | "bulkheadFull"
   | "fallbacks"
   | "timeoutsDelayed"
-  | "timeoutsLost";
+  | "timeoutsLost"
+  | "discardedWork";
 
 const COUNTER_FIELDS: readonly CounterField[] = [
   "arrivals",
@@ -34,6 +35,7 @@ const COUNTER_FIELDS: readonly CounterField[] = [
   "fallbacks",
   "timeoutsDelayed",
   "timeoutsLost",
+  "discardedWork",
 ];
 
 export interface SeriesFeatures {
@@ -180,6 +182,7 @@ export class SeriesBuilder {
       fallbacks: counter("fallbacks"),
       timeoutsDelayed: counter("timeoutsDelayed"),
       timeoutsLost: counter("timeoutsLost"),
+      discardedWork: counter("discardedWork"),
       queueDepthAvg: this.queue !== null ? this.queueAvg.slice(0, buckets) : null,
       queueDepthMax: this.queue !== null ? this.queueMax.slice(0, buckets) : null,
       utilization: this.busy !== null ? this.utilization.slice(0, buckets) : null,

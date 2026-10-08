@@ -305,3 +305,20 @@ at 150 rps it is off by 8 points. Cause found with the probes: when a caller clo
 Quarkus drops the request still queued at the server but keeps running the one already in progress;
 Fragor has no such mode (default: queued work runs; cancelOnTimeout: both are cancelled). Open:
 model "drop queued work of a departed caller" and re-validate.
+
+## 2026-10-08 — abandonedWork: drop the queued work of a departed caller
+Context: the 2026-10-07 validation showed the read-timeout configuration off by 8 points at
+150 rps and about 2 s short on tail latency at 50 and 100 rps. A probe showed why: when the caller
+closes the connection, Quarkus never runs the request still queued at the server, while the one
+already running goes on. Decision: new `options.abandonedWork: "continue" | "drop-queued" |
+"cancel"` (default "continue"; `cancelOnTimeout: true` stays as an alias of "cancel" and a
+contradiction between both is a validation error). With "drop-queued" an orphaned job is discarded
+when a worker reaches it: no worker time, no reply, counted as `discardedWork` (new node series and
+summary field); it keeps its queue slot until then. The four demo mirrors use it. Checked against
+the 2026-10-07 real runs before re-running them: at 150 rps the model moves from 49.0% to 57.3%
+success (real 57.1–57.4%), p50 from 0.28 s to 2.24 s (real 2.19–2.24 s); the @Timeout mirrors do
+not change (nothing is discarded there). Alternatives: per-edge setting (rejected for now: it is the
+server that discards, and every edge in the demo behaves the same); removing the request from the
+queue at once when the caller leaves (rejected: the slot release was not observed, and the
+dequeue-time skip reproduces the bursts seen in the real queue). Which Quarkus component skips the
+request is UNVERIFIED.

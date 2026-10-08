@@ -28,6 +28,14 @@ export function checkReferences(s: Scenario): RawIssue[] {
       seen.add(item.id);
     });
   }
+  const o = s.options;
+  if (
+    o?.cancelOnTimeout === true &&
+    o.abandonedWork !== undefined &&
+    o.abandonedWork !== "cancel"
+  ) {
+    add(["options", "abandonedWork"], `"${o.abandonedWork}" contradicts cancelOnTimeout: true`);
+  }
   const nodes = new Set(s.nodes.map((n) => n.id));
   const edges = new Map(s.edges.map((e) => [e.id, e]));
   const traffic = new Set(s.traffic.map((t) => t.id));

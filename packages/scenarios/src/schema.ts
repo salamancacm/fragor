@@ -368,7 +368,13 @@ export const scenarioObjectSchema = z
         cancelOnTimeout: z
           .boolean()
           .describe(
-            "If true, a timed-out attempt cancels the server-side work; default false (work continues: orphaned work).",
+            "Same as abandonedWork 'cancel' when true; kept for compatibility. Default false.",
+          )
+          .exactOptional(),
+        abandonedWork: z
+          .enum(["continue", "drop-queued", "cancel"])
+          .describe(
+            "What a server does with the work of a caller that timed out. 'continue' (default): all of it runs (orphaned work). 'drop-queued': work still queued is discarded when a worker reaches it, running work goes on (Quarkus when the client closes the connection). 'cancel': both are cancelled.",
           )
           .exactOptional(),
         defaultEdgeTimeoutMs: positiveMs(

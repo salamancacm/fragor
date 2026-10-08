@@ -17,6 +17,16 @@ export function validateScenario(s: Scenario): void {
   if (o.defaultEdgeTimeoutMs !== undefined) {
     requirePositive("options.defaultEdgeTimeoutMs", o.defaultEdgeTimeoutMs);
   }
+  if (o.abandonedWork !== undefined) {
+    if (!["continue", "drop-queued", "cancel"].includes(o.abandonedWork)) {
+      throw new Error(`options.abandonedWork "${String(o.abandonedWork)}" is not supported`);
+    }
+    if (o.cancelOnTimeout === true && o.abandonedWork !== "cancel") {
+      throw new Error(
+        `options.abandonedWork "${o.abandonedWork}" contradicts options.cancelOnTimeout: true`,
+      );
+    }
+  }
   unique("nodes", s.nodes);
   unique("edges", s.edges);
   unique("traffic", s.traffic);

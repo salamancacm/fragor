@@ -29,7 +29,7 @@ export interface Job {
   readonly span: SpanRef | null;
   /** The caller timed out; the work goes on (orphaned work). */
   orphaned: boolean;
-  /** The caller cancelled the work (options.cancelOnTimeout). */
+  /** The caller cancelled the work (abandonedWork "cancel"). */
   cancelled: boolean;
 }
 
@@ -53,6 +53,8 @@ export interface NodeContext {
   stream(purpose: string): Rng;
   /** Combined effect of the faults currently active on this node. */
   faults(): NodeEffects;
+  /** abandonedWork "drop-queued": skip queued jobs whose caller timed out (job.orphaned). */
+  readonly dropAbandonedQueued: boolean;
   /** Calls a dependency through an edge, applying the edge's client policies. */
   invoke(edgeId: string, parent: Job, done: (outcome: CallOutcome) => void): InvocationHandle;
 }

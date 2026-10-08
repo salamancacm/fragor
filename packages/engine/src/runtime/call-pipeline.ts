@@ -11,6 +11,7 @@ import type { ScheduledEvent, Scheduler } from "./scheduler";
 export interface CallWorld {
   readonly scheduler: Scheduler;
   readonly global: SeriesBuilder;
+  /** abandonedWork is "cancel": a timed-out attempt cancels its server-side work. */
   readonly cancelOnTimeout: boolean;
   /**
    * Delivers a request to `nodeId`, applying node outages. Returns the job, or null when the

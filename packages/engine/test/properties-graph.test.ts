@@ -63,7 +63,7 @@ const scenarioArb: fc.Arbitrary<Scenario> = fc
   .chain((n) =>
     fc.record({
       seed: fc.integer(),
-      cancelOnTimeout: fc.boolean(),
+      abandonedWork: fc.constantFrom("continue", "drop-queued", "cancel"),
       nodes: fc.tuple(...Array.from({ length: n }, (_, i) => nodeArb(`n${i}`))),
       // edge from node i to some later node j (keeps the call graph acyclic)
       targets: fc.tuple(
@@ -117,7 +117,7 @@ const scenarioArb: fc.Arbitrary<Scenario> = fc
       name: "graph-prop",
       seed: p.seed,
       durationMs: 2000,
-      options: { drainMs: 3000, cancelOnTimeout: p.cancelOnTimeout },
+      options: { drainMs: 3000, abandonedWork: p.abandonedWork },
       metrics: { bucketMs: 250 },
       nodes,
       edges,
