@@ -221,19 +221,28 @@ apps/web/src
 │  ├─ use-simulation.ts React hook owning the worker; reducer keeps `current` and `previous` runs
 │  ├─ params.ts         parameters panel state -> PatchOp[] (validated by applyPatch)
 │  ├─ graph-layout.ts   layered DAG layout (callers left of dependencies)
-│  ├─ health.ts         node/edge health per time bucket (display thresholds)
+│  ├─ stage-layout.ts   stage geometry: boxes, traffic sources, link curves (pointOn, lanePath)
+│  ├─ flow.ts           what crossed each link in a bucket (sent, rejected, outcomes, breaker)
+│  ├─ events.ts         narrated events derived from the series (saturation, shedding, breaker...)
+│  ├─ story.ts          the headline paragraph, from scenario, result and findings
+│  ├─ playback.ts       replay clock outside React (useSyncExternalStore, coarse subscriptions)
+│  ├─ particles.ts      decorative dots, seeded PRNG, never fed back into any number
+│  ├─ node-status.ts    display status of a card (idle, healthy, busy, saturated, overloaded)
 │  ├─ chart-data.ts     chart rows (current run + previous run overlay, fault windows)
 │  └─ examples.ts       the canonical scenarios, validated with parseScenario
-└─ components/          Runner, ArchitectureGraph (@xyflow/react), Charts (Recharts), SummaryCards,
-                        ParamsPanel, Insights (findings), ComparisonTable, HonestyBanner, ui/ (shadcn)
+└─ components/          Runner, TopBar, StoryHeadline, KpiStrip, stage/ (FlowStage: SVG cards and
+                        links + ParticleCanvas), Transport, EventFeed, Insights, ParamsPanel, Charts
+                        (Recharts), ComparisonTable, HonestyBanner, ui/ (shadcn)
 ```
 
 Flow: the user picks a scenario and adjusts parameters -> `patchFor` + `applyPatch` produce a
 validated scenario -> `run` posts it to the worker -> the worker posts `progress` (with a live
 snapshot) about 60 times and then `done` with the result and its findings -> the reducer moves the
-old `current` to `previous` -> cards, graph, charts, insights and the before/after table render
-from plain JSON. The time slider selects a bucket; the graph colors nodes and edges by their health
-in that bucket; clicking a finding's evidence moves the slider and highlights the target.
+old `current` to `previous` -> the headline, numbers, stage, feed, findings, charts and the
+before/after table render from plain JSON. Every finished run is replayed: one animation loop
+(ParticleCanvas, requestAnimationFrame) ticks the `Playback` clock and draws the dots; components
+subscribe to the current bucket only, so React re-renders once per simulated second, not per frame.
+Clicking an event or a finding seeks the clock and outlines the target.
 
 The web app is a static export: no server, no network calls, no telemetry.
 

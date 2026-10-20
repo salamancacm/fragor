@@ -30,18 +30,25 @@ pnpm web:dev
 Open http://localhost:3000. The simulation runs in a Web Worker in your browser; nothing is sent
 anywhere.
 
-1. **Pick a scenario** in *Example* and press **Run**. The first one runs automatically.
-2. **Read the summary cards**: success, degraded (answered by a fallback), failed, latency
-   (avg, p95, p99, end to end, retries included), retries and timeouts.
-3. **Move the time slider** under the architecture graph. Nodes and edges are colored by health in
-   that second: utilization (⚙), failed responses (✗), queue (≡), breaker state on edges.
-4. **Charts**: throughput, p95, error rate, queue depth, utilization and breaker state. Red bands
-   are the injected faults; the dashed line is the previous run.
-5. **Insights** are rule-based findings computed from the run (no AI). Click a piece of evidence
-   to jump the slider to that moment and highlight the node or edge.
-6. **Change parameters** (traffic multiplier; per edge: timeout, retries, circuit breaker) and
-   press **Run** again. Every change is listed under *What-if changes*; the cards, charts and the
-   *Before / after* table compare the new run with the previous one.
+1. **Pick a scenario** in the top bar; it runs at once (the first one runs when the page opens).
+2. **Read the headline**: one paragraph built from the run (what set things off, how far the
+   saturation spread, how many requests failed or got a fallback), then five numbers: success,
+   served by fallback, failed, p99 latency and load amplification (attempts per call), each with
+   its shape over time and its change against the previous run.
+3. **Watch the replay**. *Request flow* replays the run: dots are requests (top lane) and responses
+   (bottom lane: cyan success, violet fallback, red failed); rejected requests (503, circuit open,
+   bulkhead full) fall out of the flow. Cards fill their worker and queue gauges and turn BUSY,
+   SATURATED or OVERLOADED; a fault shows an amber badge while it lasts; a circuit breaker is a gate
+   that turns as it opens. Play, pause, change the speed (1×, 4×, 10×) or drag the timeline (arrow
+   keys move one second, Shift+arrow ten). One dot stands for several requests on busy links; the
+   numbers on the cards and links are exact.
+4. **What's happening** narrates the run as it plays (fault starts, a service saturates, sheds load,
+   a retry storm, the breaker opens, users see errors, recovery). Click an event to jump there.
+5. **Findings** are rule-based (no AI). Open one to see the numbers behind it; *at 11 s ▸* replays
+   from that moment and outlines the node or edge.
+6. **What if…**: change the traffic multiplier or, per edge, timeout, retries, where the timeout
+   runs and the circuit breaker, then press **Run with N changes**. The numbers, the charts (dashed:
+   previous run) and the *Before / after* table compare the new run with the previous one.
 
 To publish the app, serve `apps/web/out` with any static file server.
 

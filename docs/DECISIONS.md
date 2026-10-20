@@ -221,7 +221,7 @@ or invalid input. `run --json` prints the SimulationResult, `run --digest` the a
 | react / react-dom | ^19.3.0 | UI |
 | tailwindcss / @tailwindcss/postcss / postcss | ^4.3.3 / ^4.3.3 / ^8.5.29 | styling (Tailwind v4) |
 | shadcn (dev), radix-ui, class-variance-authority, cn, lucide-react, tw-animate-css | ^4.21.3, ^1.7.0, ^0.7.1, ^0.4.0, ^1.52.0, ^1.4.0 | shadcn/ui components (preset radix-nova) and their runtime: `cn` is shadcn's class merger (github.com/shadcn-ui/cn) |
-| @xyflow/react | ^12.12.0 | architecture graph |
+| @xyflow/react | ^12.12.0 | architecture graph (removed 2026-10-20, see below) |
 | recharts | ^3.10.1 | time series |
 | @types/react, @types/react-dom, @types/node | ^19.3.0, ^19.3.0, ^24 | typing |
 
@@ -322,3 +322,19 @@ server that discards, and every edge in the demo behaves the same); removing the
 queue at once when the caller leaves (rejected: the slot release was not observed, and the
 dequeue-time skip reproduces the bursts seen in the real queue). Which Quarkus component skips the
 request is UNVERIFIED.
+
+## 2026-10-20 — M5: an animated replay instead of a static dashboard
+Context: the web app showed the right numbers but did not tell what happened: a small graph frozen
+at t = 0, eight equal cards, findings as raw evidence chips. Decision (after a mockup reviewed by
+the author): one dark "control room" theme; a headline paragraph built from the run; five key
+numbers with sparklines and their change against the previous run; the run replayed on a custom
+SVG stage (cards with worker and queue gauges, two-lane links, a breaker gate, fault badges) with a
+canvas of particles; a timeline with play, speed and seek; a narrated event feed; compact findings
+that jump the replay. The narration (`events.ts`) and the headline (`story.ts`) are derived only from
+the scenario, the result and the findings, with display thresholds named in code; particles use a
+seeded PRNG and never feed back into any number. The replay clock lives outside React and
+components subscribe to the current bucket, so the page re-renders once per simulated second.
+`@xyflow/react` was removed: the stage needs per-link lanes, particles and gates that are simpler on
+a plain SVG with our own layered layout (`graph-layout.ts` already existed); it saves a dependency.
+Alternatives: keep React Flow with custom edges (heavier, two layout systems), animate in SVG only
+(too many DOM nodes for hundreds of dots), a light theme too (deferred: one theme done well first).
