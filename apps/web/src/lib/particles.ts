@@ -19,8 +19,6 @@ export interface Particle {
 
 /** Wall-clock seconds a dot takes to cross a link. */
 export const TRAVEL_S = 0.9;
-/** Where a rejected dot stops along its link before falling away. */
-export const REJECT_STOP = 0.5;
 const MAX_PARTICLES = 1500;
 /** Target dots per wall-clock second on the busiest link. */
 const DOTS_PER_S = 70;
@@ -87,7 +85,8 @@ export class ParticleField {
     const dp = dtRealS / TRAVEL_S;
     this.particles = this.particles.filter((q) => {
       q.p += dp;
-      return q.kind === "rejected" ? q.p < REJECT_STOP + 0.5 : q.p < 1;
+      // Rejected dots fall away after stopping, so give them a little longer.
+      return q.kind === "rejected" ? q.p < 1.5 : q.p < 1;
     });
   }
 

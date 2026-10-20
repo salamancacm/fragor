@@ -81,14 +81,17 @@ describe("stage layout", () => {
   });
 
   it("link curves start and end on the boxes' sides", () => {
-    const l = stageLayout(s01);
+    const l = stageLayout(s03);
     for (const g of l.links) {
       const a = l.boxes[g.link.from];
       const b = l.boxes[g.link.to];
       if (!a || !b) throw new Error("missing box");
       expect(pointOn(g, 0)).toEqual({ x: a.x + a.w, y: a.y + a.h / 2 });
       expect(pointOn(g, 1)).toEqual({ x: b.x, y: b.y + b.h / 2 });
-      expect(lanePath(g, -12)).toMatch(/^M[\d.]+,[\d.]+ C/);
+      expect(lanePath(g, -12)).toMatch(/^M[\d.]+,[\d.]+ [CL]/);
+      // Monotonic left to right, so dots never travel backwards.
+      for (let t = 0.05; t <= 1; t += 0.05)
+        expect(pointOn(g, t).x).toBeGreaterThanOrEqual(pointOn(g, t - 0.05).x);
     }
   });
 });

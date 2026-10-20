@@ -16,7 +16,9 @@ import {
 } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { breakerRows, faultWindows, globalRows, nodeRows, type Row } from "@/lib/chart-data";
-import { SERIES_COLORS } from "./health-style";
+
+/** Distinct series colors for per-node and per-edge charts, readable on the dark ground. */
+const SERIES_COLORS = ["#3fb6f2", "#b48cf2", "#f5a524", "#ff5a5f", "#4fd1a5", "#f78fb3", "#8a9ab0"];
 
 interface Props {
   scenario: Scenario;
@@ -54,23 +56,31 @@ function Chart({
     <div className="h-64 w-full">
       <ResponsiveContainer>
         <LineChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis
             dataKey="t"
             type="number"
             domain={["dataMin", "dataMax"]}
             tickFormatter={(v: number) => `${v}s`}
             fontSize={11}
+            stroke="var(--dim)"
           />
           <YAxis
             tickFormatter={yFormat}
             fontSize={11}
+            stroke="var(--dim)"
             width={56}
             {...(yDomain === undefined ? {} : { domain: yDomain })}
           />
           <Tooltip
             formatter={(v) => (typeof v === "number" ? yFormat(v) : String(v))}
             labelFormatter={(t) => `t = ${String(t)} s`}
+            contentStyle={{
+              background: "var(--popover)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {faultWindows(scenario).map((f) => (
@@ -78,12 +88,12 @@ function Chart({
               key={f.id}
               x1={f.fromS}
               x2={f.toS}
-              fill="#ef4444"
-              fillOpacity={0.08}
-              label={{ value: f.id, fontSize: 10, position: "insideTop" }}
+              fill="var(--warn)"
+              fillOpacity={0.1}
+              label={{ value: f.id, fontSize: 10, position: "insideTop", fill: "var(--warn)" }}
             />
           ))}
-          <ReferenceLine x={cursorS} stroke="#2563eb" strokeDasharray="4 2" />
+          <ReferenceLine x={cursorS} stroke="var(--foreground)" strokeOpacity={0.6} />
           {lines.map((l) => (
             <Line
               key={l.key}
@@ -114,7 +124,7 @@ export function Charts({ scenario, current, previous, cursorS }: Props) {
   const global = globalRows(current, previous);
   const hasPrev = previous !== null;
   const prevLine = (key: string, name: string): LineDef[] =>
-    hasPrev ? [{ key, name: `${name} (previous run)`, color: "#737373", dashed: true }] : [];
+    hasPrev ? [{ key, name: `${name} (previous run)`, color: "var(--dim)", dashed: true }] : [];
   const nodeIds = scenario.nodes.map((n) => n.id);
   const perNode = (): LineDef[] =>
     nodeIds.map((id, i) => ({
@@ -141,10 +151,10 @@ export function Charts({ scenario, current, previous, cursorS }: Props) {
           rows={global}
           yFormat={num}
           lines={[
-            { key: "rps", name: "arrivals/s", color: "#2563eb" },
-            { key: "successRps", name: "success/s", color: "#16a34a" },
-            { key: "degradedRps", name: "degraded/s", color: "#ca8a04" },
-            { key: "failedRps", name: "failed/s", color: "#dc2626" },
+            { key: "rps", name: "arrivals/s", color: "var(--muted-foreground)" },
+            { key: "successRps", name: "success/s", color: "var(--ok)" },
+            { key: "degradedRps", name: "fallback/s", color: "var(--deg)" },
+            { key: "failedRps", name: "failed/s", color: "var(--bad)" },
             ...prevLine("prevRps", "arrivals/s"),
           ]}
         />
@@ -155,7 +165,7 @@ export function Charts({ scenario, current, previous, cursorS }: Props) {
           rows={global}
           yFormat={millis}
           lines={[
-            { key: "p95", name: "p95 end-to-end", color: "#7c3aed" },
+            { key: "p95", name: "p95 end-to-end", color: "var(--warn)" },
             ...prevLine("prevP95", "p95"),
           ]}
         />
@@ -167,7 +177,7 @@ export function Charts({ scenario, current, previous, cursorS }: Props) {
           yFormat={percent}
           yDomain={[0, 1]}
           lines={[
-            { key: "errorRate", name: "failed / completed", color: "#dc2626" },
+            { key: "errorRate", name: "failed / completed", color: "var(--bad)" },
             ...prevLine("prevErrorRate", "failed / completed"),
           ]}
         />

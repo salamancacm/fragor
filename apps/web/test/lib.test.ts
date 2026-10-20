@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { breakerRows, faultWindows, globalRows, nodeRows } from "../src/lib/chart-data";
 import { EXAMPLES } from "../src/lib/examples";
 import { COLUMN_WIDTH, layoutGraph } from "../src/lib/graph-layout";
-import { edgeHealth, nodeHealth } from "../src/lib/health";
+import { nodeStatus } from "../src/lib/node-status";
 import { DEFAULT_BREAKER, paramsOf, patchFor } from "../src/lib/params";
 import type { FromWorker } from "../src/lib/protocol";
 import { horizonOf, runInChunks } from "../src/worker/run-loop";
@@ -138,23 +138,20 @@ describe("graph layout", () => {
   });
 });
 
-describe("health and chart data", () => {
+describe("node status and chart data", () => {
   const r01 = simulate(s01);
   const r02 = simulate(s02);
 
-  it("colors a saturated node critical and an idle bucket idle", () => {
-    expect(nodeHealth(r01, "payment", 20).health).toBe("critical");
-    expect(nodeHealth(r01, "payment", 2).health).toBe("healthy");
-    expect(nodeHealth(r01, "gateway", r01.series.buckets + 5).health).toBe("idle");
-  });
-
-  it("an open breaker makes its edge critical", () => {
-    const openAt = r02.series.edges["order-payment"]?.breakerState?.indexOf("open") ?? -1;
-    expect(openAt).toBeGreaterThan(0);
-    expect(edgeHealth(r02, "order-payment", openAt)).toMatchObject({
-      health: "critical",
-      breaker: "open",
-    });
+  it("node status: saturated with a full queue is overloaded, idle when nothing happens", () => {
+    const p = r01.series.nodes.payment;
+    const u = p?.utilization?.[20] ?? 0;
+    const fill = (p?.queueDepthAvg?.[20] ?? 0) / 100;
+    expect(nodeStatus(u, fill, true)).toBe("overloaded");
+    expect(nodeStatus(p?.utilization?.[2] ?? 0, 0, true)).toBe("healthy");
+    expect(nodeStatus(0.97, 0.1, true)).toBe("saturated");
+    expect(nodeStatus(0.8, 0, true)).toBe("busy");
+    expect(nodeStatus(0, 0, false)).toBe("idle");
+    expect(r02.series.edges["order-payment"]?.breakerState).toContain("open");
   });
 
   it("global rows overlay the previous run and stay plain numbers", () => {

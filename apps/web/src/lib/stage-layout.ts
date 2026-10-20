@@ -14,12 +14,14 @@ export interface Point {
   y: number;
 }
 
-/** A link's center curve: a cubic Bézier from the caller's right side to the callee's left side. */
+/**
+ * A link's center line, from the caller's right side (p0) to the callee's left side (p3): an S curve
+ * up to `bend`, then flat into the callee, so labels sit on a level stretch. Level links are flat.
+ */
 export interface LinkGeometry {
   link: StageLink;
   p0: Point;
-  p1: Point;
-  p2: Point;
+  bend: Point;
   p3: Point;
 }
 
@@ -36,7 +38,9 @@ export const NODE_H = 172;
 export const SOURCE_W = 116;
 export const SOURCE_H = 96;
 /** Room between columns for the link labels. */
-export const COL_GAP = 132;
+export const COL_GAP = 170;
+/** Share of a link's width taken by the S curve when caller and callee are on different rows. */
+const CURVE_SHARE = 0.42;
 const ROW_GAP = 56;
 const PAD_X = 16;
 /** Room above the first row for fault badges. */
@@ -74,28 +78,55 @@ export function stageLayout(s: Scenario): StageLayout {
     if (a === undefined || b === undefined) return [];
     const p0 = { x: a.x + a.w, y: a.y + a.h / 2 };
     const p3 = { x: b.x, y: b.y + b.h / 2 };
-    const dx = (p3.x - p0.x) / 2;
-    return [{ link, p0, p1: { x: p0.x + dx, y: p0.y }, p2: { x: p3.x - dx, y: p3.y }, p3 }];
+    const bend = p0.y === p3.y ? p0 : { x: p0.x + (p3.x - p0.x) * CURVE_SHARE, y: p3.y };
+    return [{ link, p0, bend, p3 }];
   });
   const bottom = Math.max(...Object.values(boxes).map((b) => b.y + b.h));
   return { width: colX(maxCol) + NODE_W + PAD_X, height: bottom + PAD_BOTTOM, boxes, links };
 }
 
-/** Point at parameter `t` in [0, 1] of the link's curve, shifted vertically by `offset`. */
+/** Share of the link's parameter range taken by the curve. */
+function curveShare(g: LinkGeometry): number {
+  const span = g.p3.x - g.p0.x;
+  return span <= 0 ? 0 : (g.bend.x - g.p0.x) / span;
+}
+
+/** Point at parameter `t` in [0, 1] along the link, shifted vertically by `offset`. */
 export function pointOn(g: LinkGeometry, t: number, offset = 0): Point {
-  const u = 1 - t;
-  const a = u * u * u;
-  const b = 3 * u * u * t;
-  const c = 3 * u * t * t;
-  const d = t * t * t;
+  const share = curveShare(g);
+  if (t >= share) {
+    const v = share >= 1 ? 1 : (t - share) / (1 - share);
+    return {
+      x: g.bend.x + (g.p3.x - g.bend.x) * v,
+      y: g.bend.y + (g.p3.y - g.bend.y) * v + offset,
+    };
+  }
+  const u = t / share;
+  const h = (g.bend.x - g.p0.x) / 2;
+  const w = 1 - u;
+  const a = w * w * w;
+  const b = 3 * w * w * u;
+  const c = 3 * w * u * u;
+  const d = u * u * u;
   return {
-    x: a * g.p0.x + b * g.p1.x + c * g.p2.x + d * g.p3.x,
-    y: a * g.p0.y + b * g.p1.y + c * g.p2.y + d * g.p3.y + offset,
+    x: a * g.p0.x + b * (g.p0.x + h) + c * (g.bend.x - h) + d * g.bend.x,
+    y: (a + b) * g.p0.y + (c + d) * g.bend.y + offset,
   };
 }
 
-/** SVG path of the curve shifted by `offset`. */
+/** Parameter of the middle of the level stretch, where labels and the breaker gate go. */
+export function labelParam(g: LinkGeometry): number {
+  return (1 + curveShare(g)) / 2;
+}
+
+export function labelAnchor(g: LinkGeometry): Point {
+  return pointOn(g, labelParam(g));
+}
+
+/** SVG path of the link shifted by `offset`. */
 export function lanePath(g: LinkGeometry, offset: number): string {
   const p = (q: Point) => `${q.x},${q.y + offset}`;
-  return `M${p(g.p0)} C${p(g.p1)} ${p(g.p2)} ${p(g.p3)}`;
+  if (g.bend === g.p0) return `M${p(g.p0)} L${p(g.p3)}`;
+  const h = (g.bend.x - g.p0.x) / 2;
+  return `M${p(g.p0)} C${p({ x: g.p0.x + h, y: g.p0.y })} ${p({ x: g.bend.x - h, y: g.bend.y })} ${p(g.bend)} L${p(g.p3)}`;
 }

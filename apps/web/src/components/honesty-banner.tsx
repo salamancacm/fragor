@@ -7,9 +7,9 @@ export function HonestyBanner() {
   return (
     <div
       role="note"
-      className="flex items-center gap-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100"
+      className="flex items-center gap-2 rounded-full border border-warn/50 bg-warn/10 px-3 py-1 text-xs text-warn"
     >
-      <Info className="size-4 shrink-0" aria-hidden />
+      <Info className="size-3.5 shrink-0" aria-hidden />
       <span>{HONESTY_LABEL}</span>
     </div>
   );

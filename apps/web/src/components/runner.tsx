@@ -1,32 +1,24 @@
 "use client";
 
-import { compareResults, type Scenario } from "@fragor/engine";
+import { compareResults, type Scenario, type SimulationResult } from "@fragor/engine";
 import { applyPatch, type Evidence, type PatchOp } from "@fragor/scenarios";
-import { Play, RotateCcw, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
+import { deriveEvents } from "@/lib/events";
 import { EXAMPLES } from "@/lib/examples";
-import { seconds } from "@/lib/format";
 import { type Params, paramsOf, patchFor } from "@/lib/params";
+import { bucketAt, Playback, usePlayback } from "@/lib/playback";
+import { storyOf } from "@/lib/story";
 import { useSimulation } from "@/lib/use-simulation";
-import { ArchitectureGraph } from "./architecture-graph";
 import { Charts } from "./charts";
 import { ComparisonTable } from "./comparison-table";
-import { HonestyBanner } from "./honesty-banner";
+import { EventFeed } from "./event-feed";
 import { Insights } from "./insights";
+import { KpiStrip } from "./kpi-strip";
 import { ParamsPanel } from "./params-panel";
-import { SummaryCards } from "./summary-cards";
+import { FlowStage } from "./stage/flow-stage";
+import { StoryHeadline } from "./story-headline";
+import { TopBar } from "./top-bar";
+import { Transport } from "./transport";
 
 const FIRST = EXAMPLES[0];
 
@@ -41,14 +33,63 @@ function patched(
   }
 }
 
+const LEGEND = [
+  ["var(--ok)", "request / success"],
+  ["var(--deg)", "fallback"],
+  ["var(--bad)", "failed / rejected"],
+] as const;
+
+function Panel({
+  title,
+  children,
+  className = "",
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-2xl border bg-card p-4 ${className}`}>
+      <h2 className="mb-2 text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+/** Charts follow the replay cursor; only this wrapper re-renders as the replay advances. */
+function ChartsAtCursor({
+  scenario,
+  result,
+  previous,
+  playback,
+}: {
+  scenario: Scenario;
+  result: SimulationResult;
+  previous: SimulationResult | null;
+  playback: Playback;
+}) {
+  const { bucketMs, buckets } = result.series;
+  const bucket = usePlayback(playback, (p) => bucketAt(p.timeMs, bucketMs, buckets));
+  return (
+    <Charts
+      scenario={scenario}
+      current={result}
+      previous={previous}
+      cursorS={(bucket * bucketMs) / 1000}
+    />
+  );
+}
+
 export function Runner() {
   const { state, run, cancel } = useSimulation();
   const [file, setFile] = useState(FIRST?.file ?? "");
   const example = EXAMPLES.find((e) => e.file === file) ?? FIRST;
   const base = example?.scenario ?? null;
   const [params, setParams] = useState<Params | null>(base === null ? null : paramsOf(base));
-  const [bucket, setBucket] = useState(0);
   const [highlight, setHighlight] = useState<string | null>(null);
+  const [playback] = useState(() => new Playback());
 
   const ops = useMemo(
     () => (base === null || params === null ? [] : patchFor(base, params)),
@@ -58,20 +99,32 @@ export function Runner() {
     () => (base === null ? { scenario: null, error: "no scenario" } : patched(base, ops)),
     [base, ops],
   );
-
   const label = `${example?.title.split(" · ")[0] ?? ""}${ops.length > 0 ? ` + ${ops.length} change(s)` : ""}`;
   const start = () => {
     if (scenario !== null) run(scenario, label);
   };
 
-  // Run the first example once so the page opens with results.
+  // Run the first example once so the page opens with a replay.
   // biome-ignore lint/correctness/useExhaustiveDependencies: run once on mount
   useEffect(() => {
     if (FIRST !== undefined) run(FIRST.scenario, FIRST.title.split(" · ")[0] ?? FIRST.file);
   }, []);
 
   const current = state.current;
-  const shown = current !== null && current.scenario.name === scenario?.name ? current : current;
+  // Every finished run replays from the start.
+  useEffect(() => {
+    if (current !== null)
+      playback.load(current.result.series.buckets * current.result.series.bucketMs);
+  }, [current, playback]);
+
+  const events = useMemo(
+    () => (current === null ? [] : deriveEvents(current.scenario, current.result)),
+    [current],
+  );
+  const story = useMemo(
+    () => (current === null ? [] : storyOf(current.scenario, current.result, current.findings)),
+    [current],
+  );
   const comparison = useMemo(
     () =>
       current !== null && state.previous !== null
@@ -79,207 +132,132 @@ export function Runner() {
         : null,
     [current, state.previous],
   );
-  const buckets = current?.result.series.buckets ?? 1;
-  const bucketMs = current?.result.series.bucketMs ?? 1000;
-  const safeBucket = Math.min(bucket, buckets - 1);
 
-  const onEvidence = (e: Evidence) => {
-    setBucket(Math.floor(e.fromMs / bucketMs));
-    setHighlight("nodeId" in e ? e.nodeId : "edgeId" in e ? e.edgeId : null);
+  const jump = (tMs: number, ref: string | null) => {
+    playback.seek(tMs);
+    setHighlight(ref);
   };
+  const onEvidence = (e: Evidence) =>
+    jump(e.fromMs, "nodeId" in e ? e.nodeId : "edgeId" in e ? e.edgeId : null);
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-4 p-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Fragor</h1>
-          <p className="text-sm text-muted-foreground">
-            Break your architecture before production does.
-          </p>
-        </div>
-        <HonestyBanner />
-      </header>
+    <div className="mx-auto max-w-[1560px] px-4 pb-12 sm:px-6">
+      <TopBar
+        file={file}
+        onFile={(f) => {
+          const next = EXAMPLES.find((e) => e.file === f);
+          setFile(f);
+          setParams(next === undefined ? null : paramsOf(next.scenario));
+          setHighlight(null);
+          if (next !== undefined) run(next.scenario, next.title.split(" · ")[0] ?? next.file);
+        }}
+        running={state.running}
+        canRun={scenario !== null}
+        changes={ops.length}
+        onRun={start}
+        onStop={cancel}
+        onReset={() => base !== null && setParams(paramsOf(base))}
+        fingerprint={current?.result.fingerprint ?? null}
+      />
+      {patchError !== null && (
+        <p className="mt-3 text-sm whitespace-pre-wrap text-bad">{patchError}</p>
+      )}
+      {state.error !== null && (
+        <p className="mt-3 text-sm text-bad">Simulation error: {state.error}</p>
+      )}
 
-      <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
-        <aside className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Scenario</CardTitle>
-              <CardDescription>{example?.scenario.description}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1">
-                <Label htmlFor="scenario">Example</Label>
-                <Select
-                  value={file}
-                  onValueChange={(f) => {
-                    const next = EXAMPLES.find((e) => e.file === f);
-                    setFile(f);
-                    setParams(next === undefined ? null : paramsOf(next.scenario));
-                    setHighlight(null);
-                  }}
-                >
-                  <SelectTrigger id="scenario" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EXAMPLES.map((e) => (
-                      <SelectItem key={e.file} value={e.file}>
-                        {e.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex gap-2">
-                {state.running === null ? (
-                  <Button onClick={start} disabled={scenario === null} className="flex-1">
-                    <Play aria-hidden /> Run
-                  </Button>
-                ) : (
-                  <Button onClick={cancel} variant="secondary" className="flex-1">
-                    <Square aria-hidden /> Stop
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  onClick={() => base !== null && setParams(paramsOf(base))}
-                  disabled={ops.length === 0}
-                  title="Reset parameters"
-                >
-                  <RotateCcw aria-hidden /> Reset
-                </Button>
-              </div>
-              {state.running !== null && (
-                <div className="space-y-1">
-                  <Progress value={Math.round(state.running.progress * 100)} />
-                  <p className="text-xs text-muted-foreground">
-                    Simulating {state.running.label}… {Math.round(state.running.progress * 100)}%
-                  </p>
-                </div>
-              )}
-              {patchError !== null && (
-                <p className="whitespace-pre-wrap text-xs text-red-700">{patchError}</p>
-              )}
-              {state.error !== null && (
-                <p className="text-xs text-red-700">Simulation error: {state.error}</p>
-              )}
-            </CardContent>
-          </Card>
-          {scenario !== null && params !== null && base !== null && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Parameters</CardTitle>
-                <CardDescription>Change, run again, compare with the previous run.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ParamsPanel scenario={base} params={params} ops={ops} onChange={setParams} />
-              </CardContent>
-            </Card>
-          )}
-        </aside>
+      {current === null ? (
+        <p className="py-24 text-center text-muted-foreground">Running the first simulation…</p>
+      ) : (
+        <>
+          <div className="py-7">
+            <StoryHeadline parts={story} />
+            <p className="mt-2 text-sm text-dim">
+              Run: {current.label}
+              {state.previous !== null && ` · compared with ${state.previous.label}`}
+            </p>
+          </div>
+          <KpiStrip
+            result={current.result}
+            previous={state.previous?.result ?? null}
+            comparison={comparison}
+            playback={playback}
+          />
 
-        <main className="min-w-0 space-y-4">
-          {shown === null ? (
-            <Card>
-              <CardContent className="py-10 text-center text-muted-foreground">
-                Running the first simulation…
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <div className="flex items-baseline justify-between gap-2">
-                <h2 className="font-medium">
-                  Run: {shown.label}
-                  {state.previous !== null && (
-                    <span className="text-muted-foreground">
-                      {" "}
-                      · compared with {state.previous.label}
-                    </span>
-                  )}
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_320px]">
+            <section className="min-w-0 rounded-2xl border bg-card p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+                  Request flow
                 </h2>
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  fingerprint {shown.result.fingerprint}
-                </span>
+                <div className="ml-auto flex flex-wrap gap-4 text-xs text-muted-foreground">
+                  {LEGEND.map(([c, l]) => (
+                    <span key={l} className="flex items-center gap-1.5">
+                      <span className="size-2 rounded-full" style={{ background: c }} />
+                      {l}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <SummaryCards summary={shown.result.summary} comparison={comparison} />
+              <FlowStage
+                scenario={current.scenario}
+                result={current.result}
+                playback={playback}
+                highlight={highlight}
+              />
+              <Transport
+                scenario={current.scenario}
+                result={current.result}
+                events={events}
+                playback={playback}
+              />
+            </section>
+            <aside className="relative min-h-80 rounded-2xl border bg-card pt-4">
+              <h2 className="px-4 text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+                What's happening
+              </h2>
+              <EventFeed events={events} playback={playback} onSelect={(e) => jump(e.tMs, e.ref)} />
+            </aside>
+          </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Architecture at t = {seconds(safeBucket * bucketMs)}</CardTitle>
-                  <CardDescription>
-                    Colored by health in the selected second: workers busy (⚙), failed responses
-                    (✗), queue (≡), breaker state on edges.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <ArchitectureGraph
-                    scenario={shown.scenario}
-                    result={shown.result}
-                    bucket={safeBucket}
-                    live={null}
-                    highlight={highlight}
-                  />
-                  <Slider
-                    min={0}
-                    max={Math.max(0, buckets - 1)}
-                    step={1}
-                    value={[safeBucket]}
-                    onValueChange={([b]) => setBucket(b ?? 0)}
-                    aria-label="Time"
-                  />
-                </CardContent>
-              </Card>
+          <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_400px]">
+            <Panel title="Findings">
+              <Insights findings={current.findings} onEvidence={onEvidence} />
+            </Panel>
+            {scenario !== null && params !== null && base !== null && (
+              <Panel title="What if…">
+                <p className="mb-4 text-sm text-muted-foreground">
+                  {example?.scenario.description}
+                </p>
+                <ParamsPanel scenario={base} params={params} ops={ops} onChange={setParams} />
+              </Panel>
+            )}
+          </div>
 
-              <Card>
-                <CardContent className="pt-2">
-                  <Charts
-                    scenario={shown.scenario}
-                    current={shown.result}
-                    previous={state.previous?.result ?? null}
-                    cursorS={(safeBucket * bucketMs) / 1000}
-                  />
-                </CardContent>
-              </Card>
+          <Panel title="Over time" className="mt-4">
+            <ChartsAtCursor
+              scenario={current.scenario}
+              result={current.result}
+              previous={state.previous?.result ?? null}
+              playback={playback}
+            />
+          </Panel>
 
-              <div className="grid gap-4 xl:grid-cols-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Insights</CardTitle>
-                    <CardDescription>
-                      Deterministic, rule-based findings computed from this run. Click evidence to
-                      jump there.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Insights findings={shown.findings} onEvidence={onEvidence} />
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Before / after</CardTitle>
-                    <CardDescription>
-                      {comparison === null
-                        ? "Change a parameter or pick another scenario and run again to compare."
-                        : "Previous run vs this run."}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {comparison !== null && state.previous !== null && (
-                      <ComparisonTable
-                        comparison={comparison}
-                        labels={[state.previous.label, shown.label]}
-                      />
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </>
+          {comparison !== null && state.previous !== null && (
+            <Panel
+              title={`Before / after: ${state.previous.label} → ${current.label}`}
+              className="mt-4"
+            >
+              <ComparisonTable
+                comparison={comparison}
+                labels={[state.previous.label, current.label]}
+              />
+            </Panel>
           )}
-        </main>
-      </div>
+        </>
+      )}
 
-      <footer className="border-t pt-3 text-xs text-muted-foreground">
+      <footer className="mt-8 border-t pt-3 text-xs text-dim">
         The simulation runs entirely in your browser; nothing is sent anywhere. Results depend on
         the parameters you assume: use them to understand mechanisms, not to predict exact numbers.
       </footer>
