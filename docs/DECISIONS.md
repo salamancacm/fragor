@@ -338,3 +338,14 @@ components subscribe to the current bucket, so the page re-renders once per simu
 a plain SVG with our own layered layout (`graph-layout.ts` already existed); it saves a dependency.
 Alternatives: keep React Flow with custom edges (heavier, two layout systems), animate in SVG only
 (too many DOM nodes for hundreds of dots), a light theme too (deferred: one theme done well first).
+
+## 2026-10-21 — Publishing the web app on GitHub Pages
+Context: the app is a static export with no server, so any static host works; GitHub Pages is free
+for public repositories. Decision: an optional `FRAGOR_BASE_PATH` (validated as `/name`) sets
+Next's `basePath`, because a project site lives under `https://<user>.github.io/<repo>/`; local
+development keeps `/`. `public/.nojekyll` stops Jekyll from hiding `_next/`. A separate
+`pages.yml` workflow repeats the CI checks, takes the path from `actions/configure-pages` and
+deploys with `upload-pages-artifact` + `deploy-pages`. Verified locally by serving the export under
+`/fragor/` (worker, chunks and examples load; no console errors). Alternatives: a `gh-pages` branch
+(commits build output to the repository), Netlify or Cloudflare Pages (another account; same build).
+Pending: the repository, its visibility and the license are the author's decision.

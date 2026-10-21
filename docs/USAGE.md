@@ -50,7 +50,14 @@ anywhere.
    runs and the circuit breaker, then press **Run with N changes**. The numbers, the charts (dashed:
    previous run) and the *Before / after* table compare the new run with the previous one.
 
-To publish the app, serve `apps/web/out` with any static file server.
+To publish the app, serve `apps/web/out` with any static file server. To serve it from a
+sub-path, build with `FRAGOR_BASE_PATH=/name pnpm web:build` (in Git Bash on Windows, prefix
+`MSYS_NO_PATHCONV=1` so the path is not rewritten).
+
+**GitHub Pages:** `.github/workflows/pages.yml` runs lint, typecheck and tests, builds the app with
+the Pages path (`/<repo>` for a project site) and deploys it on every push to `main`. In the
+repository settings choose *Pages > Source: GitHub Actions*. On the free plan Pages needs a public
+repository.
 
 ## 3. The command line
 
