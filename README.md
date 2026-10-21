@@ -88,4 +88,4 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SEMANTICS.md](docs/SEMAN
 
 ## License
 
-Not yet decided. The package is `private` and `UNLICENSED`.
+[Apache License 2.0](LICENSE). See also [NOTICE](NOTICE).

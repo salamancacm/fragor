@@ -2,7 +2,7 @@
   "name": "@fragor/engine",
   "version": "0.0.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "description": "Deterministic discrete-event simulation engine for Fragor. Pure TypeScript, zero runtime dependencies.",
   "type": "module",
   "main": "./src/index.ts",

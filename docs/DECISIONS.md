@@ -349,3 +349,12 @@ deploys with `upload-pages-artifact` + `deploy-pages`. Verified locally by servi
 `/fragor/` (worker, chunks and examples load; no console errors). Alternatives: a `gh-pages` branch
 (commits build output to the repository), Netlify or Cloudflare Pages (another account; same build).
 Pending: the repository, its visibility and the license are the author's decision.
+
+## 2026-10-21 — License: Apache-2.0
+Context: the 2026-10-06 entry left the license pending; publishing on GitHub Pages needs a public
+repository. Decision (the author's): Apache License 2.0, with a NOTICE file. It is permissive like
+MIT and adds an explicit patent grant; it is also the license of MicroProfile, SmallRye and Quarkus,
+the ecosystem Fragor targets, so adopting it raises no new legal review there. Every current
+dependency (MIT or Apache-2.0) is compatible. The packages stay `"private": true` (nothing is
+published to npm). Alternatives: MIT (shorter, no patent grant), MPL-2.0 (file-level copyleft),
+AGPL-3.0 (strong copyleft, including network use; deters adoption by companies).

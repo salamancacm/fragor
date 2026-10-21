@@ -2,7 +2,7 @@
   "name": "@fragor/cli",
   "version": "0.0.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "description": "Fragor command line: run and compare scenarios.",
   "type": "module",
   "bin": {

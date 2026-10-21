@@ -2,7 +2,7 @@
   "name": "@fragor/web",
   "version": "0.0.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "description": "Fragor web UI: runs the engine in a Web Worker, entirely in the browser.",
   "type": "module",
   "dependencies": {

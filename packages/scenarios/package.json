@@ -2,7 +2,7 @@
   "name": "@fragor/scenarios",
   "version": "0.0.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "description": "Fragor scenario schemas (Zod), validation, typed patches, findings and analysis digest, plus canonical examples.",
   "type": "module",
   "files": [

@@ -2,7 +2,7 @@
   "name": "fragor",
   "version": "0.0.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "description": "Deterministic simulator for microservice resilience policies.",
   "type": "module",
   "packageManager": "pnpm@10.18.3",
