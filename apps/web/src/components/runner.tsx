@@ -2,7 +2,9 @@
 
 import { compareResults, type Scenario, type SimulationResult } from "@fragor/engine";
 import { applyPatch, type Evidence, type PatchOp } from "@fragor/scenarios";
+import { Download } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { deriveEvents } from "@/lib/events";
 import { EXAMPLES } from "@/lib/examples";
 import { type Params, paramsOf, patchFor } from "@/lib/params";
@@ -11,6 +13,7 @@ import { storyOf } from "@/lib/story";
 import { useSimulation } from "@/lib/use-simulation";
 import { Charts } from "./charts";
 import { ComparisonTable } from "./comparison-table";
+import { CustomScenario, downloadScenario } from "./custom/custom-scenario";
 import { EventFeed } from "./event-feed";
 import { Insights } from "./insights";
 import { KpiStrip } from "./kpi-strip";
@@ -21,6 +24,8 @@ import { TopBar } from "./top-bar";
 import { Transport } from "./transport";
 
 const FIRST = EXAMPLES[0];
+/** Value of the scenario picker for the user's own scenario. */
+const CUSTOM = "custom";
 
 function patched(
   base: Scenario,
@@ -85,8 +90,13 @@ function ChartsAtCursor({
 export function Runner() {
   const { state, run, cancel } = useSimulation();
   const [file, setFile] = useState(FIRST?.file ?? "");
+  // The user's own scenario (quick form or JSON); selected with file === CUSTOM.
+  const [custom, setCustom] = useState<Scenario | null>(null);
+  const [showCustom, setShowCustom] = useState(false);
   const example = EXAMPLES.find((e) => e.file === file) ?? FIRST;
-  const base = example?.scenario ?? null;
+  const isCustom = file === CUSTOM && custom !== null;
+  const base = isCustom ? custom : (example?.scenario ?? null);
+  const baseLabel = isCustom ? `Yours: ${custom.name}` : (example?.title.split(" · ")[0] ?? "");
   const [params, setParams] = useState<Params | null>(base === null ? null : paramsOf(base));
   const [highlight, setHighlight] = useState<string | null>(null);
   const [playback] = useState(() => new Playback());
@@ -99,7 +109,16 @@ export function Runner() {
     () => (base === null ? { scenario: null, error: "no scenario" } : patched(base, ops)),
     [base, ops],
   );
-  const label = `${example?.title.split(" · ")[0] ?? ""}${ops.length > 0 ? ` + ${ops.length} change(s)` : ""}`;
+  const label = `${baseLabel}${ops.length > 0 ? ` + ${ops.length} change(s)` : ""}`;
+  const runCustom = (s: Scenario) => {
+    setCustom(s);
+    setFile(CUSTOM);
+    setParams(paramsOf(s));
+    setHighlight(null);
+    setShowCustom(false);
+    run(s, `Yours: ${s.name}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
   const start = () => {
     if (scenario !== null) run(scenario, label);
   };
@@ -145,6 +164,10 @@ export function Runner() {
       <TopBar
         file={file}
         onFile={(f) => {
+          if (f === CUSTOM) {
+            if (custom !== null) runCustom(custom);
+            return;
+          }
           const next = EXAMPLES.find((e) => e.file === f);
           setFile(f);
           setParams(next === undefined ? null : paramsOf(next.scenario));
@@ -158,7 +181,13 @@ export function Runner() {
         onStop={cancel}
         onReset={() => base !== null && setParams(paramsOf(base))}
         fingerprint={current?.result.fingerprint ?? null}
+        customName={custom?.name ?? null}
+        customOpen={showCustom}
+        onCustom={() => setShowCustom((v) => !v)}
       />
+      {showCustom && (
+        <CustomScenario current={scenario} onRun={runCustom} onClose={() => setShowCustom(false)} />
+      )}
       {patchError !== null && (
         <p className="mt-3 text-sm whitespace-pre-wrap text-bad">{patchError}</p>
       )}
@@ -226,10 +255,16 @@ export function Runner() {
             </Panel>
             {scenario !== null && params !== null && base !== null && (
               <Panel title="What if…">
-                <p className="mb-4 text-sm text-muted-foreground">
-                  {example?.scenario.description}
-                </p>
+                <p className="mb-4 text-sm text-muted-foreground">{base.description}</p>
                 <ParamsPanel scenario={base} params={params} ops={ops} onChange={setParams} />
+                <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
+                  <Button variant="outline" size="sm" onClick={() => downloadScenario(scenario)}>
+                    <Download aria-hidden /> Download this scenario (JSON)
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setShowCustom(true)}>
+                    Edit it or model your own…
+                  </Button>
+                </div>
               </Panel>
             )}
           </div>

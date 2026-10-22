@@ -1,6 +1,6 @@
 "use client";
 
-import { Play, RotateCcw, Square } from "lucide-react";
+import { Play, RotateCcw, SlidersHorizontal, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -23,6 +23,10 @@ interface Props {
   onStop: () => void;
   onReset: () => void;
   fingerprint: string | null;
+  /** Name of the user's own scenario, once there is one (it joins the picker). */
+  customName: string | null;
+  customOpen: boolean;
+  onCustom: () => void;
 }
 
 /** Brand, scenario picker, run controls and the honesty note, on one line. */
@@ -36,6 +40,9 @@ export function TopBar({
   onStop,
   onReset,
   fingerprint,
+  customName,
+  customOpen,
+  onCustom,
 }: Props) {
   return (
     <header className="flex flex-wrap items-center gap-x-5 gap-y-3 border-b py-3.5">
@@ -53,8 +60,16 @@ export function TopBar({
               {e.title}
             </SelectItem>
           ))}
+          {customName !== null && <SelectItem value="custom">Yours · {customName}</SelectItem>}
         </SelectContent>
       </Select>
+      <Button
+        variant={customOpen ? "secondary" : "outline"}
+        onClick={onCustom}
+        aria-expanded={customOpen}
+      >
+        <SlidersHorizontal aria-hidden /> Your scenario
+      </Button>
       {running === null ? (
         <Button onClick={onRun} disabled={!canRun}>
           <Play aria-hidden /> Run
