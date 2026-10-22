@@ -50,6 +50,27 @@ anywhere.
    runs and the circuit breaker, then press **Run with N changes**. The numbers, the charts (dashed:
    previous run) and the *Before / after* table compare the new run with the previous one.
 
+### Your own system
+
+Fragor does not connect to your services: you describe them with numbers from your configuration
+and metrics, and it simulates what happens when something fails. Press **Your scenario** in the
+top bar:
+
+- **Quick form** (one service of yours and one dependency it calls): requests per second, worker
+  threads (`quarkus.thread-pool.max-threads`), queue limit, the service's own time (p50/p99,
+  without the call), the dependency's response time and error rate, your timeout, retries, circuit
+  breaker and fallback, and what to try (the dependency gets slower, returns errors or goes down).
+  **Run my scenario** validates and replays it; it then appears in the picker as *Yours · …* and
+  the *What if…* panel works on it. **Continue in JSON** opens it as JSON to add more services.
+- **JSON** (any architecture): paste a scenario or open a `.json` file (same format as the CLI and
+  `packages/scenarios/examples`), then **Validate and run**. Errors name the field, e.g.
+  `nodes[api].workers: Too small` or `traffic[web].target: unknown node "ghost"`, and JSON syntax
+  errors give the line and column. **Load the scenario on screen** starts from the current one.
+
+**Download this scenario (JSON)** in *What if…* saves the scenario on screen, with your changes,
+to run it with the CLI or share it. The form and the JSON are remembered in this browser only
+(local storage); nothing is sent anywhere.
+
 To publish the app, serve `apps/web/out` with any static file server. To serve it from a
 sub-path, build with `FRAGOR_BASE_PATH=/name pnpm web:build` (in Git Bash on Windows, prefix
 `MSYS_NO_PATHCONV=1` so the path is not rewritten).

@@ -358,3 +358,17 @@ the ecosystem Fragor targets, so adopting it raises no new legal review there. E
 dependency (MIT or Apache-2.0) is compatible. The packages stay `"private": true` (nothing is
 published to npm). Alternatives: MIT (shorter, no patent grant), MPL-2.0 (file-level copyleft),
 AGPL-3.0 (strong copyleft, including network use; deters adoption by companies).
+
+## 2026-10-21 — M6: your own scenario in the web app
+Context: the web app only ran the six examples, so a new user could not try their own service;
+"how do I connect my microservice?" showed that Fragor's model (describe, do not connect) was not
+obvious. Decision: a *Your scenario* panel with (1) a quick form for the most common case, one
+service and one dependency, whose fields map to configuration and metrics a Quarkus user has at
+hand (`lib/template.ts`: pure, validated with the same schema as the CLI); (2) a JSON tab for any
+architecture (`lib/import.ts`: size limit, JSON syntax errors with line and column, schema issues
+with the field path by id); (3) download of the scenario on screen. The user's scenario joins the
+picker and works with *What if…*. Form and JSON are kept in `localStorage` (per-browser
+convenience, wrapped in try/catch; the page works without it). Nothing is sent anywhere.
+Alternatives: a full visual editor (larger; the JSON tab plus the form cover the need first),
+importing from OpenTelemetry traces or Prometheus (the real "connect" story, a later milestone),
+sharing scenarios in the URL (deferred: long URLs, privacy of architecture details).
