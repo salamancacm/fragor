@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EXAMPLES } from "@/lib/examples";
+import { GithubLink } from "./github-link";
 import { HonestyBanner } from "./honesty-banner";
 import { BrandMark } from "./story-headline";
 
@@ -102,6 +103,7 @@ export function TopBar({
       <Button variant="ghost" onClick={onHelp}>
         <CircleHelp aria-hidden /> How it works
       </Button>
+      <GithubLink />
       {fingerprint !== null && (
         <span
           className="font-mono text-[11px] text-dim"
