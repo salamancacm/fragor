@@ -1,6 +1,6 @@
 "use client";
 
-import { Play, RotateCcw, SlidersHorizontal, Square } from "lucide-react";
+import { CircleHelp, Play, RotateCcw, SlidersHorizontal, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -27,6 +27,8 @@ interface Props {
   customName: string | null;
   customOpen: boolean;
   onCustom: () => void;
+  /** Opens the welcome screen again (what Fragor is, the tour). */
+  onHelp: () => void;
 }
 
 /** Brand, scenario picker, run controls and the honesty note, on one line. */
@@ -43,6 +45,7 @@ export function TopBar({
   customName,
   customOpen,
   onCustom,
+  onHelp,
 }: Props) {
   return (
     <header className="flex flex-wrap items-center gap-x-5 gap-y-3 border-b py-3.5">
@@ -67,6 +70,7 @@ export function TopBar({
         variant={customOpen ? "secondary" : "outline"}
         onClick={onCustom}
         aria-expanded={customOpen}
+        data-tour="your-scenario"
       >
         <SlidersHorizontal aria-hidden /> Your scenario
       </Button>
@@ -95,6 +99,9 @@ export function TopBar({
         </div>
       )}
       <div className="flex-1" />
+      <Button variant="ghost" onClick={onHelp}>
+        <CircleHelp aria-hidden /> How it works
+      </Button>
       {fingerprint !== null && (
         <span
           className="font-mono text-[11px] text-dim"

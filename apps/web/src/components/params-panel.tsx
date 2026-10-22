@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { describeOp, type EdgeParams, type Params } from "@/lib/params";
+import { HelpTip } from "./guide/help-tip";
 
 interface Props {
   scenario: Scenario;
@@ -54,9 +55,12 @@ export function ParamsPanel({ scenario, params, ops, onChange }: Props) {
             </legend>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label htmlFor={`timeout-${edge.id}`} className="text-xs">
-                  Timeout (ms)
-                </Label>
+                <div className="flex items-center gap-1">
+                  <Label htmlFor={`timeout-${edge.id}`} className="text-xs">
+                    Timeout (ms)
+                  </Label>
+                  <HelpTip topic="timeout" label="a timeout" />
+                </div>
                 <Input
                   id={`timeout-${edge.id}`}
                   type="number"
@@ -70,9 +74,12 @@ export function ParamsPanel({ scenario, params, ops, onChange }: Props) {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor={`retries-${edge.id}`} className="text-xs">
-                  Retries
-                </Label>
+                <div className="flex items-center gap-1">
+                  <Label htmlFor={`retries-${edge.id}`} className="text-xs">
+                    Retries
+                  </Label>
+                  <HelpTip topic="retry" label="a retry" />
+                </div>
                 <Input
                   id={`retries-${edge.id}`}
                   type="number"
@@ -103,9 +110,12 @@ export function ParamsPanel({ scenario, params, ops, onChange }: Props) {
               />
             </div>
             <div className="flex items-center justify-between">
-              <Label htmlFor={`breaker-${edge.id}`} className="text-xs">
-                Circuit breaker
-              </Label>
+              <div className="flex items-center gap-1">
+                <Label htmlFor={`breaker-${edge.id}`} className="text-xs">
+                  Circuit breaker
+                </Label>
+                <HelpTip topic="breaker" label="a circuit breaker" />
+              </div>
               <Switch
                 id={`breaker-${edge.id}`}
                 checked={p.breaker}

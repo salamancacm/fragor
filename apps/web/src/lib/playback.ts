@@ -67,6 +67,13 @@ export class Playback {
     this.emit();
   }
 
+  /** Starts playing (from the start again when at the end). */
+  play(): void {
+    if (this.t >= this.total) this.t = 0;
+    this.playing = true;
+    this.emit();
+  }
+
   /** Play from the start again when at the end. */
   toggle(): void {
     if (!this.playing && this.t >= this.total) this.t = 0;

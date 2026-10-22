@@ -7,8 +7,10 @@ import type {
   SimulationSummary,
 } from "@fragor/engine";
 import { ms } from "@/lib/format";
+import type { HelpKey } from "@/lib/guide";
 import { bucketAt, type Playback, usePlayback } from "@/lib/playback";
 import { cn } from "@/lib/utils";
+import { HelpTip } from "./guide/help-tip";
 
 interface Props {
   result: SimulationResult;
@@ -21,6 +23,7 @@ type Better = "higher" | "lower" | "neither";
 
 interface Kpi {
   label: string;
+  help: HelpKey;
   value: string;
   /** Change against the previous run, already formatted, and whether it is good news. */
   delta: { text: string; verdict: "better" | "worse" | "same" } | null;
@@ -87,6 +90,7 @@ function kpis(
   return [
     {
       label: "Success",
+      help: "success",
       value: `${(pct(s.success, s) * 100).toFixed(1)}%`,
       delta: fromComparison(c, "successRate", pp),
       series: g.success,
@@ -94,6 +98,7 @@ function kpis(
     },
     {
       label: "Served by fallback",
+      help: "fallback",
       value: `${(pct(s.degraded, s) * 100).toFixed(1)}%`,
       delta: fromComparison(c, "degradedRate", pp),
       series: g.degraded,
@@ -101,6 +106,7 @@ function kpis(
     },
     {
       label: "Failed",
+      help: "failed",
       value: `${(pct(s.failed, s) * 100).toFixed(1)}%`,
       delta: fromComparison(c, "failedRate", pp),
       series: g.failed,
@@ -108,6 +114,7 @@ function kpis(
     },
     {
       label: "p99 latency",
+      help: "p99",
       value: ms(s.p99Ms),
       delta: fromComparison(c, "p99Ms", (d) => `${d > 0 ? "+" : "−"}${ms(Math.abs(d))}`),
       series: g.p99Ms,
@@ -115,6 +122,7 @@ function kpis(
     },
     {
       label: "Load amplification",
+      help: "amplification",
       value: `×${amp.toFixed(2)}`,
       delta: manual(
         amp,
@@ -179,7 +187,10 @@ export function KpiStrip({ result, previous, comparison, playback }: Props) {
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
       {kpis(result, previous, comparison).map((k) => (
         <div key={k.label} className="rounded-xl border bg-card px-4 pt-3.5 pb-2.5">
-          <div className="text-xs text-muted-foreground">{k.label}</div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {k.label}
+            <HelpTip topic={k.help} label={k.label} />
+          </div>
           <div className="mt-1 font-mono text-[1.65rem] leading-tight font-semibold tabular-nums">
             {k.value}
           </div>

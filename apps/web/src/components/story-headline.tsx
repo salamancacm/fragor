@@ -1,11 +1,15 @@
 import type { StoryPart } from "@/lib/story";
+import { HelpTip } from "./guide/help-tip";
 import { TONE_VAR } from "./transport";
 
 /** The run in one paragraph; the numbers that matter carry their color (and stay plain text). */
 export function StoryHeadline({ parts }: { parts: readonly StoryPart[] }) {
   return (
     <div>
-      <p className="text-xs font-semibold tracking-[0.12em] text-brand uppercase">What happened</p>
+      <p className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.12em] text-brand uppercase">
+        What happened
+        <HelpTip topic="story" label="this summary" />
+      </p>
       <p className="mt-1.5 max-w-5xl text-2xl leading-snug font-semibold text-balance">
         {parts.map((p, i) =>
           p.tone === null ? (

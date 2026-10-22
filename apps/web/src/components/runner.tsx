@@ -3,10 +3,11 @@
 import { compareResults, type Scenario, type SimulationResult } from "@fragor/engine";
 import { applyPatch, type Evidence, type PatchOp } from "@fragor/scenarios";
 import { Download } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { deriveEvents } from "@/lib/events";
 import { EXAMPLES } from "@/lib/examples";
+import { type HelpKey, TOUR, type TourStep, type TourTarget, troubleMoment } from "@/lib/guide";
 import { type Params, paramsOf, patchFor } from "@/lib/params";
 import { bucketAt, Playback, usePlayback } from "@/lib/playback";
 import { storyOf } from "@/lib/story";
@@ -15,6 +16,10 @@ import { Charts } from "./charts";
 import { ComparisonTable } from "./comparison-table";
 import { CustomScenario, downloadScenario } from "./custom/custom-scenario";
 import { EventFeed } from "./event-feed";
+import { HelpTip } from "./guide/help-tip";
+import { Tour } from "./guide/tour";
+import { useGuide } from "./guide/use-guide";
+import { Welcome } from "./guide/welcome";
 import { Insights } from "./insights";
 import { KpiStrip } from "./kpi-strip";
 import { ParamsPanel } from "./params-panel";
@@ -44,20 +49,33 @@ const LEGEND = [
   ["var(--bad)", "failed / rejected"],
 ] as const;
 
+function SectionTitle({ title, help }: { title: string; help?: HelpKey }) {
+  return (
+    <h2 className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+      {title}
+      {help !== undefined && <HelpTip topic={help} label={title} />}
+    </h2>
+  );
+}
+
 function Panel({
   title,
+  help,
+  tour,
   children,
   className = "",
 }: {
   title: string;
+  help?: HelpKey;
+  tour?: TourTarget;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
-    <section className={`rounded-2xl border bg-card p-4 ${className}`}>
-      <h2 className="mb-2 text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-        {title}
-      </h2>
+    <section className={`rounded-2xl border bg-card p-4 ${className}`} data-tour={tour}>
+      <div className="mb-2">
+        <SectionTitle title={title} {...(help === undefined ? {} : { help })} />
+      </div>
       {children}
     </section>
   );
@@ -100,6 +118,7 @@ export function Runner() {
   const [params, setParams] = useState<Params | null>(base === null ? null : paramsOf(base));
   const [highlight, setHighlight] = useState<string | null>(null);
   const [playback] = useState(() => new Playback());
+  const guide = useGuide();
 
   const ops = useMemo(
     () => (base === null || params === null ? [] : patchFor(base, params)),
@@ -156,6 +175,29 @@ export function Runner() {
     playback.seek(tMs);
     setHighlight(ref);
   };
+  const startTour = () => {
+    // The tour is written for example 01: show it, from the start.
+    setShowCustom(false);
+    setHighlight(null);
+    if (FIRST !== undefined && (file !== FIRST.file || ops.length > 0 || current === null)) {
+      setFile(FIRST.file);
+      setParams(paramsOf(FIRST.scenario));
+      run(FIRST.scenario, FIRST.title.split(" · ")[0] ?? FIRST.file);
+    }
+    guide.tour();
+  };
+  const onTourStep = useCallback(
+    (step: TourStep) => {
+      if (step.replay === "start") playback.seek(0);
+      else if (step.replay === "trouble") {
+        // Slow down so the cascade can be watched while reading the step.
+        playback.seek(troubleMoment(events));
+        playback.setSpeed(1);
+      }
+      if (step.replay !== undefined) playback.play();
+    },
+    [playback, events],
+  );
   const onEvidence = (e: Evidence) =>
     jump(e.fromMs, "nodeId" in e ? e.nodeId : "edgeId" in e ? e.edgeId : null);
 
@@ -184,7 +226,19 @@ export function Runner() {
         customName={custom?.name ?? null}
         customOpen={showCustom}
         onCustom={() => setShowCustom((v) => !v)}
+        onHelp={guide.welcome}
       />
+      {guide.state === "welcome" && (
+        <Welcome
+          onTour={startTour}
+          onOwn={() => {
+            guide.close();
+            setShowCustom(true);
+          }}
+          onSkip={guide.close}
+        />
+      )}
+      {guide.state === "tour" && <Tour steps={TOUR} onStep={onTourStep} onClose={guide.close} />}
       {showCustom && (
         <CustomScenario current={scenario} onRun={runCustom} onClose={() => setShowCustom(false)} />
       )}
@@ -199,26 +253,27 @@ export function Runner() {
         <p className="py-24 text-center text-muted-foreground">Running the first simulation…</p>
       ) : (
         <>
-          <div className="py-7">
+          <div className="py-7" data-tour="story">
             <StoryHeadline parts={story} />
             <p className="mt-2 text-sm text-dim">
               Run: {current.label}
               {state.previous !== null && ` · compared with ${state.previous.label}`}
             </p>
           </div>
-          <KpiStrip
-            result={current.result}
-            previous={state.previous?.result ?? null}
-            comparison={comparison}
-            playback={playback}
-          />
+          <div data-tour="kpis">
+            <KpiStrip
+              result={current.result}
+              previous={state.previous?.result ?? null}
+              comparison={comparison}
+              playback={playback}
+            />
+          </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_320px]">
-            <section className="min-w-0 rounded-2xl border bg-card p-4">
+            <section className="min-w-0 rounded-2xl border bg-card p-4" data-tour="stage">
               <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-                  Request flow
-                </h2>
+                <SectionTitle title="Request flow" help="flow" />
+                <HelpTip topic="card" label="a service card" />
                 <div className="ml-auto flex flex-wrap gap-4 text-xs text-muted-foreground">
                   {LEGEND.map(([c, l]) => (
                     <span key={l} className="flex items-center gap-1.5">
@@ -234,27 +289,29 @@ export function Runner() {
                 playback={playback}
                 highlight={highlight}
               />
-              <Transport
-                scenario={current.scenario}
-                result={current.result}
-                events={events}
-                playback={playback}
-              />
+              <div data-tour="transport">
+                <Transport
+                  scenario={current.scenario}
+                  result={current.result}
+                  events={events}
+                  playback={playback}
+                />
+              </div>
             </section>
-            <aside className="relative min-h-80 rounded-2xl border bg-card pt-4">
-              <h2 className="px-4 text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-                What's happening
-              </h2>
+            <aside className="relative min-h-80 rounded-2xl border bg-card pt-4" data-tour="feed">
+              <div className="px-4">
+                <SectionTitle title="What's happening" help="feed" />
+              </div>
               <EventFeed events={events} playback={playback} onSelect={(e) => jump(e.tMs, e.ref)} />
             </aside>
           </div>
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_400px]">
-            <Panel title="Findings">
+            <Panel title="Findings" help="findings" tour="findings">
               <Insights findings={current.findings} onEvidence={onEvidence} />
             </Panel>
             {scenario !== null && params !== null && base !== null && (
-              <Panel title="What if…">
+              <Panel title="What if…" help="whatIf" tour="what-if">
                 <p className="mb-4 text-sm text-muted-foreground">{base.description}</p>
                 <ParamsPanel scenario={base} params={params} ops={ops} onChange={setParams} />
                 <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
@@ -269,26 +326,33 @@ export function Runner() {
             )}
           </div>
 
-          <Panel title="Over time" className="mt-4">
-            <ChartsAtCursor
-              scenario={current.scenario}
-              result={current.result}
-              previous={state.previous?.result ?? null}
-              playback={playback}
-            />
-          </Panel>
-
-          {comparison !== null && state.previous !== null && (
-            <Panel
-              title={`Before / after: ${state.previous.label} → ${current.label}`}
-              className="mt-4"
-            >
-              <ComparisonTable
-                comparison={comparison}
-                labels={[state.previous.label, current.label]}
+          <details className="group mt-4 rounded-2xl border bg-card">
+            <summary className="cursor-pointer list-none p-4 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+              <span className="text-muted-foreground group-open:hidden">▸ </span>
+              <span className="hidden text-muted-foreground group-open:inline">▾ </span>
+              More detail: charts over time
+              {comparison !== null && " and the before / after table"}
+            </summary>
+            <div className="space-y-6 px-4 pb-4">
+              <ChartsAtCursor
+                scenario={current.scenario}
+                result={current.result}
+                previous={state.previous?.result ?? null}
+                playback={playback}
               />
-            </Panel>
-          )}
+              {comparison !== null && state.previous !== null && (
+                <div>
+                  <SectionTitle
+                    title={`Before / after: ${state.previous.label} → ${current.label}`}
+                  />
+                  <ComparisonTable
+                    comparison={comparison}
+                    labels={[state.previous.label, current.label]}
+                  />
+                </div>
+              )}
+            </div>
+          </details>
         </>
       )}
 
