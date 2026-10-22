@@ -124,7 +124,7 @@ export function CustomScenario({ current, onRun, onClose }: Props) {
         <div className="flex-1">
           <h2 className="text-lg font-semibold">Model your own system</h2>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Fragor does not connect to your services: you describe them with numbers from your
+            Fragor does not connect to your services yet: you describe them with numbers from your
             configuration and metrics, and it simulates what happens when something fails. Start
             with the quick form, or paste a full scenario. Nothing leaves your browser.
           </p>

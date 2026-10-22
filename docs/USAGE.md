@@ -57,7 +57,7 @@ every section and number has a **?** with a plain-language explanation.
 
 ### Your own system
 
-Fragor does not connect to your services: you describe them with numbers from your configuration
+Fragor does not connect to your services yet: you describe them with numbers from your configuration
 and metrics, and it simulates what happens when something fails. Press **Your scenario** in the
 top bar:
 
