@@ -372,3 +372,17 @@ convenience, wrapped in try/catch; the page works without it). Nothing is sent a
 Alternatives: a full visual editor (larger; the JSON tab plus the form cover the need first),
 importing from OpenTelemetry traces or Prometheus (the real "connect" story, a later milestone),
 sharing scenarios in the URL (deferred: long URLs, privacy of architecture details).
+
+## 2026-10-22 — M7: guide first-time visitors
+Context: on its public page the app opened straight onto the full dashboard; a first-time visitor
+could not tell what Fragor does or how to use it. Decision: a welcome screen on the first visit
+(what Fragor is in one sentence, three steps: describe, break something, watch and compare; two ways
+to start: a guided example or the quick form), remembered in `localStorage` and reopened with *How
+it works*; an eight-step guided tour over example 01, written in our own small component (a
+spotlight, a card, keyboard: arrows and Escape) that moves the replay to the start or to the first
+trouble at 1x speed; plain-language "?" tips on every section, number and resilience setting
+(`lib/guide.ts` holds every text, shared by the three); and less on screen at once: the detailed
+charts and the before/after table are folded under *More detail*. No new dependency. Alternatives:
+a tour library (react-joyride and similar: a dependency for a few hundred lines), a separate
+landing page (one more page to keep in sync; the welcome sits on top of a live example instead),
+a video (cannot be interacted with, goes stale).

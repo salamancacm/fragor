@@ -30,6 +30,11 @@ pnpm web:dev
 Open http://localhost:3000. The simulation runs in a Web Worker in your browser; nothing is sent
 anywhere.
 
+On the first visit a welcome screen explains Fragor in three steps and offers a **guided tour**
+(eight steps over example 01: each region is outlined and explained, and the replay moves to the
+moment that matters) or to **model your own service**. *How it works* in the top bar opens it again;
+every section and number has a **?** with a plain-language explanation.
+
 1. **Pick a scenario** in the top bar; it runs at once (the first one runs when the page opens).
 2. **Read the headline**: one paragraph built from the run (what set things off, how far the
    saturation spread, how many requests failed or got a fallback), then five numbers: success,
