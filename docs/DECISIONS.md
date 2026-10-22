@@ -386,3 +386,25 @@ charts and the before/after table are folded under *More detail*. No new depende
 a tour library (react-joyride and similar: a dependency for a few hundred lines), a separate
 landing page (one more page to keep in sync; the welcome sits on top of a live example instead),
 a video (cannot be interacted with, goes stale).
+
+## 2026-10-22 — M8: observed-system model and draft scenario builder
+Context: [CONNECT-PLAN.md](CONNECT-PLAN.md) proposes importing the telemetry of running services.
+Whatever the source (traces, metrics, configuration, a person), the result must say where every
+number came from, or an imported scenario would pass guesses off as measurements. Decision: a new
+pure package `@fragor/importers` with an intermediate `ObservedSystem` (versioned JSON, JSON Schema
+committed and checked by a test) whose every value carries `origin` (observed, inferred, config,
+user, assumed) and `detail`; `buildScenario` builds the draft and an `ImportReport`; missing values
+get explicit placeholders (round numbers, not framework defaults, since those are unverified) marked
+`assumed`, and the ones that matter become open questions with a hint of where to look (for
+Quarkus, the `quarkus.thread-pool.*` keys the demo sets and validates). The user's answers reuse the
+typed `set`/`unset` patches instead of a new mechanism: what they touch becomes origin `user` and
+closes its question; structural edits are refused. SmallRye's `DEFAULT_BREAKER` and `DEFAULT_RETRY`
+moved to `@fragor/scenarios` so the web app and the importers share one definition, and
+`formatPath` takes the id'd collections as an optional parameter. Dependencies: `zod` for the new
+package, the same version `@fragor/scenarios` already uses; nothing else is new. Check: the Quarkus
+demo's configuration, written as an observed system, builds a scenario that matches the
+hand-written mirror (nodes, edges, traffic) and whose simulation summary is identical to the
+mirror's, number for number (a lognormal with p50 = p99 draws the same random numbers as a
+constant). Alternatives: building scenarios straight from each source (every importer would repeat
+the provenance and placeholder logic), a free-form answers object (a second editing mechanism next
+to the patches), failing when data is missing (nothing could be imported from partial telemetry).

@@ -1,7 +1,8 @@
 # Connecting running services to Fragor: plan
 
-Status: **proposed** (2026-10-22), nothing here is built. Today Fragor asks you to *describe* your
-system (quick form or JSON). This plan lets a developer point Fragor at services they run, locally
+Status: **proposed** (2026-10-22); **M8 is done** (the observed-system model and the draft builder,
+see [ARCHITECTURE.md](ARCHITECTURE.md)), the readers of traces and metrics are not. Today Fragor asks
+you to *describe* your system (quick form or JSON). This plan lets a developer point Fragor at services they run, locally
 or in a real environment, and get a calibrated scenario to break. Decisions go to
 [DECISIONS.md](DECISIONS.md) once approved.
 
@@ -128,7 +129,7 @@ Effort is relative (S, M, L).
 
 | | Scope | Acceptance | Effort |
 | --- | --- | --- | --- |
-| **M8** | `ObservedSystem` types, provenance, `buildScenario`, the import report, versioned JSON Schema | Fixtures built by hand produce valid scenarios; every field carries its source; deterministic output | M |
+| **M8** (done) | `ObservedSystem` types, provenance, `buildScenario`, the import report, versioned JSON Schema | Fixtures built by hand produce valid scenarios; every field carries its source; deterministic output. Met: the demo's configuration builds the mirror scenario and simulates identically | M |
 | **M9** | Traces: OTLP/JSON(L) parser to `ObservedSystem`; infer topology, probabilities, attempts, timeout, self time; `fragor import traces`; web *Import* tab. **Starts with a spike** that adds OpenTelemetry to the Quarkus demo and settles the UNVERIFIED items | Demo traces give the four-service chain, retries and the 2 s timeout of `order → payment` | L |
 | **M10** | Metrics: Prometheus text parser and read-only HTTP client; rate, errors, latency, fallback use; documented `MeterFilter` for percentiles, with a clear fallback (mean and max) marked `assumed` | Demo metrics agree with the traces to within sampling error | M |
 | **M11** | `fragor validate` and a *How close is the model?* panel: simulated vs observed per service and edge, the largest gaps, which `assumed` values matter most (sensitivity) | On the demo, the same tolerances as the existing [validation matrix](../examples/quarkus-demo/README.md) | M |

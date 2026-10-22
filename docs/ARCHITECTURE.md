@@ -5,11 +5,13 @@ Fragor is a monorepo. The engine is the product; every other package is a consum
 ```
 packages/engine     @fragor/engine     pure TS, zero runtime deps, no DOM, no Node APIs
 packages/scenarios  @fragor/scenarios  Zod schemas, JSON Schema, patches, findings, digest, examples
+packages/importers  @fragor/importers  observed-system model and the draft-scenario builder (pure, no network)
 packages/cli        @fragor/cli        `fragor run|compare|schema` (bundled with esbuild)
 apps/web            @fragor/web        Next.js static UI; runs the engine in a Web Worker
 ```
 
-Dependency direction: `web`, `cli`, `scenarios` -> `engine`. Never the reverse.
+Dependency direction: `web`, `cli`, `importers`, `scenarios` -> `engine`; `importers` -> `scenarios`.
+Never the reverse.
 `packages/scenarios` validates untrusted input with Zod and hands the engine already-typed values.
 The types in `packages/engine/src/model/types.ts` are the source of truth; Zod schemas are
 declared `satisfies z.ZodType<Scenario>` so the compiler detects divergence.
@@ -176,6 +178,34 @@ scenarios/src
    ├─ rules-*.ts      one file per family of rules
    └─ digest.ts       buildAnalysisDigest(scenario, result, findings)
 ```
+
+## Importers package (`@fragor/importers`)
+
+Turns what a running system showed into a draft scenario, without ever claiming more than it knows
+(plan: [CONNECT-PLAN.md](CONNECT-PLAN.md)). Pure TypeScript, no network and no file access; readers
+of traces and metrics (later milestones) produce its input.
+
+```
+importers/src
+├─ observed.ts      ObservedSystem v1: services, calls, traffic, window; every value is
+│                   Sourced<T> = { value, origin, detail }, origin in observed|inferred|config|user|assumed.
+│                   Zod schema, parseObserved (errors name items by id), checkObserved (ids, references)
+├─ placeholders.ts  round numbers used when the data says nothing (NOT framework defaults), and the
+│                   hints on where to find each value
+├─ notes.ts         collects report entries and open questions while building
+├─ policies.ts      timeout, retry, circuit breaker and fallback of an edge (SmallRye defaults for
+│                   what cannot be observed, listed as questions)
+├─ build.ts         buildScenario(observed, { answers }) -> { scenario, report } | { ok: false, errors }
+├─ answers.ts       the user's edits are the typed `set`/`unset` patches of @fragor/scenarios; what they
+│                   touch becomes origin `user` and closes its question
+├─ report.ts        ImportReport (entries, questions, counts per origin, warnings) and renderReport (Markdown)
+└─ json-schema.ts   JSON Schema of ObservedSystem, committed in schema/observed-system.schema.json
+```
+
+Rules: observed values are used as they are; whatever is missing gets a placeholder marked
+`assumed` and, when it matters, a question; the scenario is validated with the same schema as any
+other; the output depends only on the input. The Quarkus demo's configuration, described as an
+observed system, builds a scenario that simulates exactly like the hand-written mirror.
 
 ## Analysis: findings and digest
 
