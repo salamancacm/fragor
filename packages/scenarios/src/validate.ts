@@ -31,8 +31,15 @@ export const scenarioSchema = scenarioObjectSchema.superRefine((s, ctx) => {
 
 const COLLECTIONS = new Set(["nodes", "edges", "traffic", "faults"]);
 
-/** Renders a Zod path, naming items of id'd collections by their id when available. */
-export function formatPath(path: readonly PropertyKey[], input: unknown): string {
+/**
+ * Renders a Zod path, naming items of id'd collections by their id when available. The
+ * collections are those of a scenario unless the caller gives its own (other formats, same idea).
+ */
+export function formatPath(
+  path: readonly PropertyKey[],
+  input: unknown,
+  collections: ReadonlySet<string> = COLLECTIONS,
+): string {
   let out = "";
   let cursor: unknown = input;
   let parentKey: PropertyKey | undefined;
@@ -44,7 +51,7 @@ export function formatPath(path: readonly PropertyKey[], input: unknown): string
     if (typeof key === "number") {
       const itemId = isRecord(next) && typeof next.id === "string" ? next.id : undefined;
       out +=
-        COLLECTIONS.has(String(parentKey)) && itemId !== undefined ? `[${itemId}]` : `[${key}]`;
+        collections.has(String(parentKey)) && itemId !== undefined ? `[${itemId}]` : `[${key}]`;
     } else {
       out += out === "" ? String(key) : `.${String(key)}`;
     }

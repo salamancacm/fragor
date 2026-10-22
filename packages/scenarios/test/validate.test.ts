@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Scenario, simulate } from "@fragor/engine";
 import { describe, expect, it } from "vitest";
-import { parseScenario, ScenarioValidationError, safeParseScenario } from "../src";
+import { formatPath, parseScenario, ScenarioValidationError, safeParseScenario } from "../src";
 import { EXAMPLE_FILES, rawExample } from "./examples";
 
 function base(): Scenario {
@@ -128,4 +128,18 @@ describe("Quarkus demo mirror scenarios", () => {
       expect(simulate(s).summary.roots).toBeGreaterThan(0);
     });
   }
+});
+
+describe("formatPath", () => {
+  const input = { nodes: [{ id: "api" }], services: [{ id: "web" }] };
+
+  it("names the items of a scenario's collections by id", () => {
+    expect(formatPath(["nodes", 0, "workers"], input)).toBe("nodes[api].workers");
+  });
+
+  it("names the items of the collections it is given, and others by index", () => {
+    const collections = new Set(["services"]);
+    expect(formatPath(["services", 0, "id"], input, collections)).toBe("services[web].id");
+    expect(formatPath(["nodes", 0, "workers"], input, collections)).toBe("nodes[0].workers");
+  });
 });
