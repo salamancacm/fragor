@@ -1,0 +1,688 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "number",
+      "const": 1,
+      "description": "Format version of the observed system."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of the system."
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where the data was read from."
+    },
+    "window": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the observed window was."
+        },
+        "durationMs": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Length of the observed window, in milliseconds (> 0)."
+        }
+      },
+      "required": [
+        "description",
+        "durationMs"
+      ],
+      "additionalProperties": false,
+      "description": "The period that was observed."
+    },
+    "services": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the service. No dots or whitespace."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Display name."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "service",
+              "external-api"
+            ],
+            "description": "service: runs on workers you control; external-api: someone else's."
+          },
+          "workers": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "description": "Worker threads handling requests (integer >= 1)."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Worker threads handling requests (integer >= 1)."
+          },
+          "queueLimit": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Requests that may wait for a worker (integer >= 0); null means unbounded."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Requests that may wait for a worker (integer >= 0); null means unbounded."
+          },
+          "workerModel": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "enum": [
+                  "blocking",
+                  "async"
+                ],
+                "description": "blocking: a thread waits for its dependencies; async: it is released meanwhile."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "blocking: a thread waits for its dependencies; async: it is released meanwhile."
+          },
+          "serviceTime": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "object",
+                "properties": {
+                  "p50Ms": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Median, in milliseconds (> 0)."
+                  },
+                  "p99Ms": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "99th percentile, in milliseconds; must be >= p50Ms."
+                  }
+                },
+                "required": [
+                  "p50Ms",
+                  "p99Ms"
+                ],
+                "additionalProperties": false,
+                "description": "Response time summarized by median and 99th percentile."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Own processing time, without waiting for dependencies."
+          },
+          "errorRate": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Share of requests the service answers with an error by itself, a fraction in 0..1."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Own error rate."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "description": "A service or external API seen in the system."
+      },
+      "description": "Services and external APIs."
+    },
+    "calls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the call (it becomes the edge id). No dots or whitespace."
+          },
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the calling service. No dots or whitespace."
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the called service. No dots or whitespace."
+          },
+          "probability": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Share of the caller's requests that make this call, a fraction in 0..1."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "How often the call is made."
+          },
+          "networkMs": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number",
+                "minimum": 0,
+                "description": "One-way network latency, in milliseconds (>= 0)."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Network latency."
+          },
+          "timeoutMs": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Attempt timeout in milliseconds (> 0); null means there is none."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Attempt timeout in milliseconds (> 0); null means there is none."
+          },
+          "retries": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Retries after the first attempt (integer, 0 to 100); 0 means none."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Retries after the first attempt (integer, 0 to 100); 0 means none."
+          },
+          "retryDelayMs": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Wait between retries, in milliseconds (>= 0)."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Retry delay."
+          },
+          "retryJitterMs": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Random extra wait added to each retry delay, in milliseconds (>= 0)."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Retry jitter."
+          },
+          "breaker": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "boolean",
+                "description": "Whether a circuit breaker guards the call."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Whether a circuit breaker guards the call."
+          },
+          "fallback": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "boolean",
+                "description": "Whether a fallback answers when the call fails."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Whether a fallback answers when the call fails."
+          }
+        },
+        "required": [
+          "id",
+          "from",
+          "to"
+        ],
+        "additionalProperties": false,
+        "description": "A call from one service to another."
+      },
+      "description": "Calls between services."
+    },
+    "traffic": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the traffic source. No dots or whitespace."
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^.\\s]+$",
+            "description": "Stable identifier of the service that receives it. No dots or whitespace."
+          },
+          "rps": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Requests per second arriving at the target (>= 0)."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "Requests per second arriving at the target (>= 0)."
+          },
+          "arrivals": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "enum": [
+                  "constant",
+                  "poisson"
+                ],
+                "description": "How requests arrive: evenly spaced (constant) or at random (poisson); poisson when absent."
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "inferred",
+                  "config",
+                  "user",
+                  "assumed"
+                ],
+                "description": "Where the value comes from: observed (measured), inferred (derived by a stated rule), config (read from configuration), user (given by a person), assumed (a placeholder)."
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "description": "How the value was obtained, or why it is a guess."
+              }
+            },
+            "required": [
+              "value",
+              "origin",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "description": "How requests arrive: evenly spaced (constant) or at random (poisson); poisson when absent."
+          }
+        },
+        "required": [
+          "id",
+          "target",
+          "rps"
+        ],
+        "additionalProperties": false,
+        "description": "Traffic entering the system at a service."
+      },
+      "description": "Traffic entering the system."
+    }
+  },
+  "required": [
+    "version",
+    "name",
+    "source",
+    "window",
+    "services",
+    "calls",
+    "traffic"
+  ],
+  "additionalProperties": false,
+  "description": "What a running system showed (traces, metrics, configuration), with the origin of every value, from which Fragor builds a draft scenario. Also required (checked by Fragor, not by JSON Schema): ids are unique per collection; calls start and end at listed services; traffic targets a listed service; p99Ms >= p50Ms.",
+  "$id": "urn:fragor:schema:observed-system:v1",
+  "title": "Fragor observed system"
+}

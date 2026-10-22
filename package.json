@@ -12,7 +12,7 @@
   "scripts": {
     "lint": "biome ci .",
     "format": "biome check --write .",
-    "typecheck": "tsc -p packages/engine && tsc -p packages/engine/test && tsc -p packages/scenarios && tsc -p packages/scenarios/test && tsc -p packages/cli && tsc -p apps/web",
+    "typecheck": "tsc -p packages/engine && tsc -p packages/engine/test && tsc -p packages/scenarios && tsc -p packages/scenarios/test && tsc -p packages/importers && tsc -p packages/importers/test && tsc -p packages/cli && tsc -p apps/web",
     "test": "vitest run",
     "bench": "vitest bench --run --silent=false",
     "build": "node packages/cli/build.mjs && NEXT_TELEMETRY_DISABLED=1 node apps/web/node_modules/next/dist/bin/next build apps/web",

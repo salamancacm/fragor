@@ -100,6 +100,18 @@ importers:
 
   packages/engine: {}
 
+  packages/importers:
+    dependencies:
+      '@fragor/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@fragor/scenarios':
+        specifier: workspace:*
+        version: link:../scenarios
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+
   packages/scenarios:
     dependencies:
       '@fragor/engine':
