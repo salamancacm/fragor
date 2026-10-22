@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 26 26" width="160" height="160" role="img" aria-labelledby="t">
+  <title id="t">Fragor</title>
+  <path d="M13 2 23 7.5v11L13 24 3 18.5v-11Z" fill="#10161e" stroke="#ff7a45" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M13 2 11 10l5 3-4 11" fill="none" stroke="#ff7a45" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>
