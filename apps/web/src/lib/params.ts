@@ -1,16 +1,7 @@
-import type { CircuitBreakerPolicy, RetryPolicy, Scenario, TrafficPattern } from "@fragor/engine";
-import type { PatchOp } from "@fragor/scenarios";
+import type { Scenario, TrafficPattern } from "@fragor/engine";
+import { DEFAULT_BREAKER, DEFAULT_RETRY, type PatchOp } from "@fragor/scenarios";
 
-/** SmallRye @CircuitBreaker defaults, used when the UI turns a breaker on for an edge without one. */
-export const DEFAULT_BREAKER: CircuitBreakerPolicy = {
-  requestVolumeThreshold: 20,
-  failureRatio: 0.5,
-  delayMs: 5000,
-  successThreshold: 1,
-};
-
-/** SmallRye @Retry defaults (delay 0, jitter 200 ms), used when the UI adds retries to an edge. */
-export const DEFAULT_RETRY: Omit<RetryPolicy, "maxRetries"> = { delayMs: 0, jitterMs: 200 };
+export { DEFAULT_BREAKER, DEFAULT_RETRY } from "@fragor/scenarios";
 
 export interface EdgeParams {
   /** Attempt timeout; null = no timeout policy (Quarkus default read timeout applies). */

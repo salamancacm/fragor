@@ -10,6 +10,7 @@ export {
   type FindingThresholds,
   type Severity,
 } from "./analysis/types";
+export { DEFAULT_BREAKER, DEFAULT_RETRY } from "./defaults";
 export { SCENARIO_SCHEMA_ID, scenarioJsonSchema } from "./json-schema";
 export {
   applyPatch,
