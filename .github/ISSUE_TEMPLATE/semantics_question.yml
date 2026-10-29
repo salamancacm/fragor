@@ -1,0 +1,18 @@
+name: Behavior differs from Quarkus or SmallRye
+description: The simulation does not match what MicroProfile Fault Tolerance, SmallRye or Quarkus does
+labels: [semantics]
+body:
+  - type: textarea
+    id: expected
+    attributes:
+      label: What the real system does
+      description: Link the official documentation or describe what you measured, with the configuration.
+    validations:
+      required: true
+  - type: textarea
+    id: fragor
+    attributes:
+      label: What Fragor does
+      description: Attach the scenario JSON and the seed.
+    validations:
+      required: true
