@@ -57,9 +57,10 @@ every section and number has a **?** with a plain-language explanation.
 
 ### Your own system
 
-Fragor does not connect to your services yet: you describe them with numbers from your configuration
-and metrics, and it simulates what happens when something fails. Press **Your scenario** in the
-top bar:
+Fragor does not connect to your running services yet: you describe them with numbers from your
+configuration and metrics, or import the OpenTelemetry traces they already produce (see
+[Importing traces](#importing-traces)), and it simulates what happens when something fails. Press
+**Your scenario** in the top bar:
 
 - **Quick form** (one service of yours and one dependency it calls): requests per second, worker
   threads (`quarkus.thread-pool.max-threads`), queue limit, the service's own time (p50/p99,
@@ -75,6 +76,75 @@ top bar:
 **Download this scenario (JSON)** in *What if…* saves the scenario on screen, with your changes,
 to run it with the CLI or share it. The form and the JSON are remembered in this browser only
 (local storage); nothing is sent anywhere.
+
+### Importing traces
+
+If your services already send OpenTelemetry traces, Fragor can build a draft of your system from
+them: which services call which, how often, how long each takes, retries and timeouts. It reads the
+file in your browser (or with the CLI); nothing is sent anywhere. It is an *import*: Fragor never
+connects to your services.
+
+**1. Get a traces file.** Send the traces of your services to an OpenTelemetry Collector with the
+[file exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/fileexporter/README.md),
+which writes one OTLP JSON document per line (the `json` format is its default):
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+exporters:
+  file:
+    path: /out/traces.jsonl
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [file]
+```
+
+In Quarkus, add the `quarkus-opentelemetry` extension (it instruments REST servers and REST
+clients) and point it at the Collector with `quarkus.otel.exporter.otlp.endpoint` (default
+`http://localhost:4317`, gRPC). Then use the system as usual, or run a load test, for a few minutes.
+The Quarkus demo has a ready recipe: [examples/quarkus-demo](../examples/quarkus-demo/README.md),
+"Capturing traces".
+
+**2. Import it.** In the web app: *Your scenario → Import traces from your services*, drop the
+file. Or from the command line:
+
+```bash
+fragor import traces traces.jsonl --from 2026-10-29T19:08:38Z --to 2026-10-29T19:08:41Z \
+  --out draft.json --report report.md
+fragor run draft.json
+```
+
+**3. Use a calm period** (`--from` / `--to`, or the range fields in the web app). A server span
+includes the time a request waited for a worker, so response times measured while a service was
+saturated are inflated. Requests refused with 503 (a full queue) are counted and left out.
+
+**4. Answer what the traces cannot tell.** Fragor lists *open questions*: threads and queue sizes
+(`quarkus.thread-pool.max-threads` and `quarkus.thread-pool.queue-size` in Quarkus), whether a
+thread waits for its dependencies, circuit breakers and fallbacks. In the web app each has a small
+form; with the CLI use `--set nodes.order.workers=100` (the same patches as `fragor run`). Until
+answered, a placeholder is used and marked *assumed*; the report says which numbers are measured,
+inferred (and by which rule), from configuration, given by you or assumed.
+
+What is read from the traces:
+
+| Parameter | How |
+| --- | --- |
+| Services and calls | a client span and the server span below it; a call without server spans is an external API |
+| Traffic | requests that start a trace, per second |
+| How often a call is made | requests of the caller that made it, over all requests of the caller |
+| Own time (p50 / p99) | the server span minus the time spent in its calls |
+| Network | half the difference between a call's duration and its server span |
+| Retries | the most attempts seen for one request, minus one: **at least** (the cap may never have been reached) |
+| Timeout | when callers stopped waiting: gaps between an attempt left running and its retry, or a call outliving its caller. A timeout that fires late (a saturated caller) looks longer than configured |
+| Own error rate | errors that none of the request's calls caused; 503 rejections and timeouts are not the service's own |
+
+Inferred timeouts and retries are asked to be confirmed. The draft is a starting point: run it, then
+compare it with what you observed.
 
 To publish the app, serve `apps/web/out` with any static file server. To serve it from a
 sub-path, build with `FRAGOR_BASE_PATH=/name pnpm web:build` (in Git Bash on Windows, prefix

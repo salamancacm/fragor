@@ -44,10 +44,13 @@ runs in your browser and nothing is sent anywhere. The first visit offers a guid
 - **Change and compare**: timeouts, retries, circuit breaker, traffic. Every number is compared
   with the previous run.
 - **Model your own system** with the *Your scenario* panel: a quick form (one service and one
-  dependency) or any architecture as JSON.
+  dependency), any architecture as JSON, or the **OpenTelemetry traces** your services already
+  produce: Fragor builds a draft from them, marks which numbers it measured and which are
+  placeholders, and asks the rest.
 
-> Fragor does not connect to your services **yet**: you describe them with numbers from your
-> configuration and metrics. Connecting running services is planned, see the
+> Fragor does not connect to your running services **yet**: you describe them with numbers from
+> your configuration and metrics, or import the traces they already produce
+> ([how](docs/USAGE.md#importing-traces)). Live connections and metrics are planned, see the
 > [roadmap](docs/CONNECT-PLAN.md).
 
 ## What the engine models
@@ -92,12 +95,12 @@ fallback changes. What-if from the command line:
 ## Roadmap
 
 Done: engine, resilience policies, scenarios and findings, CLI, web app with an animated replay,
-your own scenario in the browser, a first-visit guide, and validation against real Quarkus services.
+your own scenario in the browser, a first-visit guide, validation against real Quarkus services,
+and **importing OpenTelemetry traces** into a draft scenario that says where every number came from
+(a draft built from the demo's traces reproduces the latency that was measured).
 
-Next: **connecting running services** (local or real) by importing the telemetry they already
-produce (OpenTelemetry traces, Prometheus metrics, configuration) into a calibrated scenario, with
-a report of how well the model reproduces what was observed. The plan is in
-[docs/CONNECT-PLAN.md](docs/CONNECT-PLAN.md).
+Next: Prometheus metrics, and a report of how well the model reproduces what was observed. The plan
+is in [docs/CONNECT-PLAN.md](docs/CONNECT-PLAN.md).
 
 ## Development
 

@@ -408,3 +408,42 @@ mirror's, number for number (a lognormal with p50 = p99 draws the same random nu
 constant). Alternatives: building scenarios straight from each source (every importer would repeat
 the provenance and placeholder logic), a free-form answers object (a second editing mechanism next
 to the patches), failing when data is missing (nothing could be imported from partial telemetry).
+
+## 2026-10-29 — M9: import OpenTelemetry traces
+Context: M8 gave the observed-system model; something must fill it from a running system. Traces
+come first (CONNECT-PLAN.md): they are language-agnostic and show who calls whom. The plan left
+several facts unverified, so the milestone started with a spike on real data: the Quarkus demo with
+`quarkus-opentelemetry` (an optional Maven profile and a compose override, off by default so the
+validated runs keep measuring the services without tracing), traces collected by the OpenTelemetry
+Collector's file exporter. Findings (also in the demo README): retries are separate client spans;
+with `@Timeout` the call's span is not cut at the timeout (it ends with a normal status when the
+response arrives), so a timeout shows only in the gap before the retry; a full queue answers with a
+~1 ms server span, error status, HTTP 503; 186 of the gateway's 500s had no failing call below them
+(its 10 s timeouts), so "error without a failing child" overstated its own errors.
+Decision: `parseOtlp` reads OTLP JSON by the specification (hex ids, decimal-string nanoseconds,
+integer enums; lines, one document or an array); `observeTraces` builds the `ObservedSystem`:
+calls from client and server spans (a call with no server span is an external API), traffic from
+requests that start a trace, call probability, own time as the server span minus the union of its
+calls, network as half of the call-minus-server difference, retries as the most attempts seen minus
+one (a lower bound, and the user is asked to confirm), timeouts as the lower edge of the tightest
+cluster of "when the caller stopped waiting" observations (gaps before a retry of an attempt left
+running, or a call outliving its caller), own errors excluding 503 rejections and anything a call
+caused. Everything inferred says its rule and sample size. Requests are selected by when their trace
+starts (`--from`/`--to`): response times need a calm window because server spans include the wait
+for a worker. The CLI gets `fragor import traces|observed`; the web app an *Import traces* tab that
+reads the file in the browser and answers the open questions with small forms, which are the typed
+patches of M8 (`import-answers.ts`); unsetting something that is not there counts as an answer
+("no circuit breaker"). No new dependency.
+Evidence: from the demo's traces, a calm window gives traffic 30.01 req/s, the four-service chain,
+own times within the framework's overhead of the configured ones, and a draft whose simulated
+end-to-end latency (p50 / p95 / p99 150.5 / 261.6 / 324.0 ms) matches the measured one (150.7 /
+257.1 / 319.1 ms); the whole run gives timeouts of 2,053 ms and 9,999 ms (configured 2,000 and
+10,000) and at least 2 retries (3 configured; no request reached the fourth attempt). Importing
+the 11 MB capture takes 0.16 s in the CLI.
+Limits (documented): a timeout that never fired on time is seen only as late (the gateway's looked
+like 19 s in a short sample); two legitimate calls to the same dependency in one request read as a
+retry (hence the confirmation); traces that were sampled are not scaled up; only the stable HTTP
+attribute names are read. Alternatives: receiving OTLP in a local server (needs a protobuf decoder:
+a new dependency; the Collector already converts to JSON), reading Jaeger's `/api` (documented as
+internal), metrics first (no topology), importing only through the JSON tab (the questions need
+forms).

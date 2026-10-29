@@ -1,7 +1,8 @@
 # Connecting running services to Fragor: plan
 
-Status: **proposed** (2026-10-22); **M8 is done** (the observed-system model and the draft builder,
-see [ARCHITECTURE.md](ARCHITECTURE.md)), the readers of traces and metrics are not. Today Fragor asks
+Status: **proposed** (2026-10-22); **M8 and M9 are done** (the observed-system model, the draft
+builder, and the import of OpenTelemetry traces in the CLI and the web app, see
+[ARCHITECTURE.md](ARCHITECTURE.md) and [USAGE.md](USAGE.md#importing-traces)); the reader of metrics is not. Today Fragor asks
 you to *describe* your system (quick form or JSON). This plan lets a developer point Fragor at services they run, locally
 or in a real environment, and get a calibrated scenario to break. Decisions go to
 [DECISIONS.md](DECISIONS.md) once approved.
@@ -89,16 +90,28 @@ The last row's keys are exactly the ones the Quarkus demo sets and the validatio
   `exceptionThrown`) and `fallback` (`applied`, `notApplied`, `notDefined`); Micrometer uses the
   same names and tags; quantiles need a `MeterFilter`.
 
-### UNVERIFIED (to settle in the spike of M9/M10, never assumed)
+### Settled by the spike of M9, on the Quarkus demo (2026-10-29)
 
-- The property that makes Quarkus export OTLP over HTTP instead of gRPC, and whether the Collector
-  bridge needs it.
+- The Collector's file exporter writes one `{"resourceSpans": [...]}` per line, an OTLP JSON
+  export request. Quarkus reaches the Collector over its default gRPC (port 4317), so no OTLP/HTTP
+  property is needed.
+- Retries of a REST client call appear as separate client spans under the caller's server span (with
+  SmallRye `@Retry`). With `@Timeout`, the client span is not cut at the timeout: it ends when the
+  response arrives, with a normal status, so a timeout shows only in the gap before the retry.
+- REST client spans carry `http.response.status_code`, `server.address`, `server.port` and
+  `url.full`; a full queue answers with a server span of about 1 ms, status error, HTTP 503.
+- Server spans include the time a request waited for a worker, so response times need a calm window.
+- Only the stable HTTP attribute names above are read; the legacy names (`http.status_code`,
+  `net.peer.name`) are not supported (not verified).
+
+### UNVERIFIED (to settle in M10, never assumed)
+
 - Parameters of Jaeger's `/api/v3` trace query.
 - The names of the other `ft.*` metrics (timeout, retry, circuit breaker, bulkhead), the REST
   client metric names, and thread-pool metric names.
-- Whether retries of a REST client call appear as separate client spans.
 - The maximum points per series of a Prometheus range query (query in chunks to be safe).
 - The default Prometheus scrape path in Quarkus (`/q/metrics` is expected).
+- Sampled traces: the rate and call probabilities of a sampled file are not scaled up.
 
 ## 5. Design
 
@@ -130,7 +143,7 @@ Effort is relative (S, M, L).
 | | Scope | Acceptance | Effort |
 | --- | --- | --- | --- |
 | **M8** (done) | `ObservedSystem` types, provenance, `buildScenario`, the import report, versioned JSON Schema | Fixtures built by hand produce valid scenarios; every field carries its source; deterministic output. Met: the demo's configuration builds the mirror scenario and simulates identically | M |
-| **M9** | Traces: OTLP/JSON(L) parser to `ObservedSystem`; infer topology, probabilities, attempts, timeout, self time; `fragor import traces`; web *Import* tab. **Starts with a spike** that adds OpenTelemetry to the Quarkus demo and settles the UNVERIFIED items | Demo traces give the four-service chain, retries and the 2 s timeout of `order → payment` | L |
+| **M9** (done) | Traces: OTLP/JSON(L) parser to `ObservedSystem`; infer topology, probabilities, attempts, timeout, self time; `fragor import traces`; web *Import* tab. **Starts with a spike** that adds OpenTelemetry to the Quarkus demo and settles the UNVERIFIED items | Demo traces give the four-service chain, retries and the 2 s timeout of `order → payment`. Met: the chain, retries (at least 2 of 3), timeouts of 2,053 ms and 9,999 ms (configured 2,000 and 10,000), and a draft whose simulated latency matches the measured one | L |
 | **M10** | Metrics: Prometheus text parser and read-only HTTP client; rate, errors, latency, fallback use; documented `MeterFilter` for percentiles, with a clear fallback (mean and max) marked `assumed` | Demo metrics agree with the traces to within sampling error | M |
 | **M11** | `fragor validate` and a *How close is the model?* panel: simulated vs observed per service and edge, the largest gaps, which `assumed` values matter most (sensitivity) | On the demo, the same tolerances as the existing [validation matrix](../examples/quarkus-demo/README.md) | M |
 | **M12** | Local lab recipe (compose with a collector); `application.properties` reader; optionally a Quarkus extension that reads annotations at build time for exact policy parameters, and export back to `application.properties` and annotations | Round trip on the demo: import, change a policy, export, the demo config matches | L |

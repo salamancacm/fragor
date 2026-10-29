@@ -183,10 +183,19 @@ scenarios/src
 
 Turns what a running system showed into a draft scenario, without ever claiming more than it knows
 (plan: [CONNECT-PLAN.md](CONNECT-PLAN.md)). Pure TypeScript, no network and no file access; readers
-of traces and metrics (later milestones) produce its input.
+of metrics (a later milestone) will produce its input; the reader of OpenTelemetry traces is here.
 
 ```
 importers/src
+├─ otlp.ts          parseOtlp: OTLP/JSON traces (Collector file exporter lines, one document, an
+│                   array) -> Span[] (ids hex, 64-bit times as decimal strings, enums as integers)
+├─ trace-index.ts   spans by parent, the time window of a request, rootRange
+├─ stats.ts         quantiles, clusterFloor (the lower edge of a tight cluster: the timeout
+│                   estimator), union of intervals
+├─ traces.ts        observeTraces(spans, { fromMs, toMs }) -> ObservedSystem + warnings: services
+│                   and calls from client/server spans, traffic, call probability, own time
+│                   (server span minus its calls), network, retries (a lower bound), timeouts (when
+│                   callers stopped waiting), own errors (503 rejections and timeouts excluded)
 ├─ observed.ts      ObservedSystem v1: services, calls, traffic, window; every value is
 │                   Sourced<T> = { value, origin, detail }, origin in observed|inferred|config|user|assumed.
 │                   Zod schema, parseObserved (errors name items by id), checkObserved (ids, references)
@@ -233,6 +242,10 @@ explainer consumes; the explainer cites its evidence instead of inventing number
 
 ## CLI (`@fragor/cli`)
 
+`import.ts` adds `fragor import traces|observed <file>`: it reads OTLP traces (or an observed
+system), builds the draft and prints the report; `--out`, `--report`, `--observed` write files,
+`--from`/`--to` pick a calm window, `--set`/`--unset` answer the open questions.
+
 `main(argv, io)` parses arguments with `node:util` `parseArgs`, loads a scenario
 (`parseScenario`), applies `--set` / `--unset` / `--seed` as typed patches (`applyPatch`), runs
 `simulate`, and prints a summary with findings, the JSON result, the digest, or a before/after
@@ -257,11 +270,13 @@ apps/web/src
 │  ├─ story.ts          the headline paragraph, from scenario, result and findings
 │  ├─ playback.ts       replay clock outside React (useSyncExternalStore, coarse subscriptions)
 │  ├─ particles.ts      decorative dots, seeded PRNG, never fed back into any number
+│  ├─ import-answers.ts  an open question of an import -> the typed patches that answer it
+│  ├─ download.ts       offers text as a file download
 │  ├─ node-status.ts    display status of a card (idle, healthy, busy, saturated, overloaded)
 │  ├─ chart-data.ts     chart rows (current run + previous run overlay, fault windows)
 │  └─ examples.ts       the canonical scenarios, validated with parseScenario
 └─ components/          Runner, TopBar, StoryHeadline, KpiStrip, stage/ (FlowStage: SVG cards and
-                        links + ParticleCanvas), Transport, EventFeed, Insights, ParamsPanel, Charts
+                        links + ParticleCanvas), Transport, EventFeed, custom/ (quick form, JSON, ImportTraces + AnswerForm), Insights, ParamsPanel, Charts
                         (Recharts), ComparisonTable, HonestyBanner, ui/ (shadcn)
 ```
 
