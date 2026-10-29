@@ -1,0 +1,26 @@
+# Adds tracing to the demo. Build the jars with the telemetry profile first:
+#   mvn -Ptelemetry package -DskipTests
+#   docker compose -f docker-compose.yml -f docker-compose.telemetry.yml up -d --build
+# Traces land in results/telemetry/traces.jsonl (OTLP JSON, one batch per line).
+# Rebuild without the profile (mvn package -DskipTests) before the validation runs: they measure
+# the services without tracing.
+x-otel: &otel
+  QUARKUS_OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./telemetry/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+      - ./results/telemetry:/out
+
+  external-payment:
+    environment: *otel
+    depends_on: [otel-collector]
+  payment:
+    environment: *otel
+  order:
+    environment: *otel
+  gateway:
+    environment: *otel

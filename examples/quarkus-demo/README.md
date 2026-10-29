@@ -58,6 +58,58 @@ Behind a TLS-intercepting proxy (for example Cloudflare WARP) Maven may fail wit
 Manual fault injection: `curl -X POST "localhost:8083/admin/latency?extraMs=5000"`, restore with
 `curl -X DELETE localhost:8083/admin/latency`.
 
+## Capturing traces (for `fragor import traces`)
+
+The demo can also be traced with OpenTelemetry, to try Fragor's import on real telemetry. It is
+optional and off by default: the validated runs above measure the services without tracing.
+
+```bash
+export MAVEN_OPTS="-Djavax.net.ssl.trustStoreType=Windows-ROOT"   # only behind a TLS-inspecting proxy
+mvn -Ptelemetry package -DskipTests     # adds quarkus-opentelemetry to every service
+docker compose -f docker-compose.yml -f docker-compose.telemetry.yml up -d --build
+# warm up (curl -X POST localhost:8080/checkout a few hundred times), then restart the collector
+# for a clean file, then run the load:
+RATE=30 docker compose -f docker-compose.yml -f docker-compose.telemetry.yml run --rm k6
+```
+
+The OpenTelemetry Collector in `telemetry/otel-collector.yaml` receives the traces over OTLP/gRPC
+(the Quarkus default) and its file exporter writes `results/telemetry/traces.jsonl`. Rebuild
+without the profile (`mvn package -DskipTests`) before the validation runs.
+
+```bash
+fragor import traces results/telemetry/traces.jsonl --from <start of a calm period> --to <3 s later> \
+  --out draft.json --report report.md
+```
+
+What importing the traces of this demo (30 req/s, the fault from 10 s to 40 s) gives, against the
+configuration the services really have (2026-10-29):
+
+| | Imported | Configured |
+| --- | --- | --- |
+| Traffic, calm window | 30.01 req/s | 30 |
+| Calls made per request | 1.00 on each of the three | 1 |
+| Own time of `order` p50 / p99 | 12 / 47 ms | lognormal 10 / 40 ms (+ framework time) |
+| Network between services | 0.3 to 0.4 ms | not set |
+| `order → payment` retries | at least 2 | 3 (no request reached the fourth attempt) |
+| `order → payment` timeout | 2,053 ms (76 observations) | 2,000 ms (the gap adds the retry delay, 50 to 150 ms) |
+| `gateway → order` timeout | 9,999 ms (186 observations, whole run) | 10,000 ms |
+| Own error rate of every service | 0 | 0 (503 rejections and timeouts are not own errors) |
+
+Three things the traces showed, which changed how the importer reads them:
+
+- Retries are separate client spans under one server span, with the gaps between them showing the
+  timeout. With `@Timeout` the client span is **not** cut at the timeout: it ends when the response
+  finally arrives (5 to 10 s later under saturation), with a normal status. A timeout therefore
+  shows in the gap before the retry, never as an error on the call.
+- A queue that is full answers with a server span of about 1 ms, status error, HTTP 503: load
+  shedding, not a failure of the service.
+- 186 of the gateway's 500 errors had no failing call below them: they were its 10 s timeouts. Reading
+  them as the gateway's own errors would have been wrong.
+
+The draft built from a calm window reproduces the end-to-end latency that was observed: simulated
+p50 / p95 / p99 of 150.5 / 261.6 / 324.0 ms against 150.7 / 257.1 / 319.1 ms measured, before
+answering any question (at this load the placeholders for threads and queues do not matter).
+
 ## Measure and compare
 
 Every service exposes `GET /probe` (served on the Vert.x event loop, so it answers even when all

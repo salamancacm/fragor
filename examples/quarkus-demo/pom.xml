@@ -44,6 +44,23 @@
     </dependencies>
   </dependencyManagement>
 
+  <profiles>
+    <!--
+      mvn -Ptelemetry package: adds OpenTelemetry tracing to every service, to capture the traces
+      `fragor import traces` reads (see docker-compose.telemetry.yml). Off by default: the validated
+      runs measure the services without its overhead.
+    -->
+    <profile>
+      <id>telemetry</id>
+      <dependencies>
+        <dependency>
+          <groupId>io.quarkus</groupId>
+          <artifactId>quarkus-opentelemetry</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
+
   <build>
     <pluginManagement>
       <plugins>
