@@ -1,5 +1,5 @@
 import type { Scenario } from "@fragor/engine";
-import { applyPatch, type PatchOp, splitPath } from "@fragor/scenarios";
+import { applyPatch, type PatchOp, type PatchPath, splitPath } from "@fragor/scenarios";
 import type { Question, ReportEntry } from "./report";
 
 const BY_ID = new Set(["nodes", "edges", "traffic", "faults"]);
@@ -35,17 +35,29 @@ export function overlaps(a: string, b: string): boolean {
 
 export type AppliedAnswers = { ok: true; scenario: Scenario } | { ok: false; errors: string[] };
 
-/** Applies the user's edits (only set and unset) with the same typed patches as everywhere else. */
+/**
+ * Applies the user's edits (only set and unset) with the same typed patches as everywhere else.
+ * Unsetting something that is not there ("there is no circuit breaker") changes nothing, and still
+ * counts as an answer.
+ */
 export function applyAnswers(scenario: Scenario, answers: readonly PatchOp[]): AppliedAnswers {
   const other = answers.find((a) => a.op !== "set" && a.op !== "unset");
   if (other !== undefined)
     return { ok: false, errors: [`answers may only set or unset values, not "${other.op}"`] };
-  if (answers.length === 0) return { ok: true, scenario };
+  const effective = answers.filter((a) => a.op !== "unset" || !isAbsentLeaf(scenario, a.path));
+  if (effective.length === 0) return { ok: true, scenario };
   try {
-    return { ok: true, scenario: applyPatch(scenario, answers) };
+    return { ok: true, scenario: applyPatch(scenario, effective) };
   } catch (e) {
     return { ok: false, errors: [e instanceof Error ? e.message : String(e)] };
   }
+}
+
+/** Nothing to remove, but where it would be exists: "no circuit breaker" rather than a typo. */
+function isAbsentLeaf(scenario: Scenario, path: PatchPath): boolean {
+  const segments = splitPath(path);
+  if (valueAt(scenario, segments.join(".")) !== undefined) return false;
+  return valueAt(scenario, segments.slice(0, -1).join(".")) !== undefined;
 }
 
 function pathOf(op: PatchOp): string | null {

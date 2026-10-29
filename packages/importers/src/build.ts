@@ -14,6 +14,8 @@ export interface BuildOptions {
    * `unset`). What they touch becomes origin `user` and stops being an open question.
    */
   answers?: readonly PatchOp[];
+  /** Notes from the reader of the data (e.g. rejected requests), added to the report's warnings. */
+  warnings?: readonly string[];
 }
 
 export type BuildResult =
@@ -214,7 +216,7 @@ export function buildScenario(o: ObservedSystem, options: BuildOptions = {}): Bu
     entries,
     questions,
     counts: countByOrigin(entries),
-    warnings: unreachable(o),
+    warnings: [...(options.warnings ?? []), ...unreachable(o)],
   };
   return { ok: true, scenario: applied.scenario, report };
 }

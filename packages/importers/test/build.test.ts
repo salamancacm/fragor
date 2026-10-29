@@ -275,3 +275,17 @@ describe("invalid and repeatable", () => {
     expect(JSON.stringify(two)).toBe(JSON.stringify(one));
   });
 });
+
+describe("answering that something is not there", () => {
+  it("unsetting an absent policy closes the question and reports none, from the user", () => {
+    const { scenario, report } = built(bare, {
+      answers: [{ op: "unset", path: "edges.api-ext.policies.circuitBreaker" }],
+    });
+    expect(scenario.edges[0]?.policies.circuitBreaker).toBeUndefined();
+    const e = report.entries.find((x) => x.path === "edges.api-ext.policies.circuitBreaker");
+    expect(e).toMatchObject({ value: null, origin: "user" });
+    expect(report.questions.map((q) => q.path)).not.toContain(
+      "edges.api-ext.policies.circuitBreaker",
+    );
+  });
+});

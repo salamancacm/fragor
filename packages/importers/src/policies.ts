@@ -27,12 +27,19 @@ function timeoutPolicy(c: ObservedCall, notes: Notes): PolicyParts {
     "not known: none modeled (the client read timeout, 30 s by default, applies)",
   );
   const timeout = s.value === null ? undefined : { valueMs: s.value };
-  const ask = {
-    ask: `Is there a timeout on ${c.from} → ${c.to}?`,
-    hint: HINTS.timeout,
-    assumed: null,
-  };
-  note(notes, c, "timeout", timeout, s, s.origin === "assumed" ? ask : undefined);
+  const route = `${c.from} → ${c.to}`;
+  // An inferred timeout is what was seen (a timeout that fires late looks longer): confirm it.
+  const ask =
+    s.origin === "assumed"
+      ? { ask: `Is there a timeout on ${route}?`, hint: HINTS.timeout, assumed: null }
+      : s.origin === "inferred"
+        ? {
+            ask: `Is the timeout on ${route} really about ${s.value} ms?`,
+            hint: HINTS.timeout,
+            assumed: timeout,
+          }
+        : undefined;
+  note(notes, c, "timeout", timeout, s, ask);
   return timeout === undefined ? {} : { timeout };
 }
 
@@ -52,15 +59,19 @@ function retryPolicy(c: ObservedCall, notes: Notes): PolicyParts {
     retry === undefined
       ? s.detail
       : `${s.detail}; delay ${from(c.retryDelayMs)}, jitter ${from(c.retryJitterMs)}`;
-  const ask = { ask: `Does ${c.from} → ${c.to} retry?`, hint: "@Retry maxRetries", assumed: null };
-  note(
-    notes,
-    c,
-    "retry",
-    retry,
-    { origin: s.origin, detail },
-    s.origin === "assumed" ? ask : undefined,
-  );
+  const route = `${c.from} → ${c.to}`;
+  // Retries read from traces are a lower bound (the cap may never have been reached): confirm.
+  const ask =
+    s.origin === "assumed"
+      ? { ask: `Does ${route} retry?`, hint: "@Retry maxRetries", assumed: null }
+      : s.origin === "inferred"
+        ? {
+            ask: `How many retries does ${route} allow? At least ${s.value} were seen`,
+            hint: "@Retry maxRetries",
+            assumed: retry,
+          }
+        : undefined;
+  note(notes, c, "retry", retry, { origin: s.origin, detail }, ask);
   return retry === undefined ? {} : { retry };
 }
 
