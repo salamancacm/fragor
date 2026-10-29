@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import { compareResults, simulate } from "@fragor/engine";
 import { buildAnalysisDigest, deriveFindings, scenarioJsonSchema } from "@fragor/scenarios";
 import { formatComparison, formatRun } from "./format";
+import { runImport } from "./import";
 import { CliError, EXIT_OK, EXIT_RUNTIME, EXIT_USAGE, type Io } from "./io";
 import { loadScenario } from "./load";
 
@@ -9,6 +10,9 @@ export const USAGE = `Usage:
   fragor run <scenario.json> [--seed N] [--set path=value]... [--unset path]... [--json | --digest]
   fragor compare <before.json> <after.json> [--seed N] [--json]
   fragor schema [--out file]
+  fragor import traces <traces.jsonl> [--from ISO] [--to ISO] [--name N] [--out scenario.json]
+                [--report report.md] [--observed observed.json] [--set path=value]... [--unset path]...
+  fragor import observed <observed.json> [--out scenario.json] [--report report.md] [--set ...]
 
   --set path=value  edit the scenario before running; items of nodes, edges, traffic and faults
                     are addressed by id, e.g. --set edges.order-payment.policies.timeout.valueMs=1500
@@ -17,7 +21,12 @@ export const USAGE = `Usage:
   --seed N          override the scenario seed
   --json            print the machine-readable result (run: SimulationResult; compare: comparison)
   --digest          print the analysis digest (summary, timeline, per-node/edge stats, findings)
-  --out file        write the JSON Schema to a file instead of stdout
+  --out file        write the JSON Schema (schema) or the draft scenario (import) to a file
+  import traces     read OpenTelemetry traces (OTLP JSON lines, as the Collector's file exporter
+                    writes them) and build a draft scenario of the system they show, with a report of
+                    where every number came from and what is still a placeholder. --from/--to limit
+                    it to requests that started in that time range (use a calm one: response times
+                    include time waiting for a worker); --set answers the open questions
 
 Results come from a deterministic simulation of your assumptions; they are not predictions.
 `;
@@ -29,6 +38,11 @@ const OPTIONS = {
   json: { type: "boolean" },
   digest: { type: "boolean" },
   out: { type: "string" },
+  name: { type: "string" },
+  from: { type: "string" },
+  to: { type: "string" },
+  report: { type: "string" },
+  observed: { type: "string" },
   help: { type: "boolean", short: "h" },
 } as const;
 
@@ -107,6 +121,10 @@ function dispatch(argv: readonly string[], io: Io): number {
         }
       }
       return EXIT_OK;
+    }
+    case "import": {
+      const [kind, ...rest] = files;
+      return runImport(io, { kind, files: rest, ...values, ...load });
     }
     default:
       throw new CliError(`usage: unknown command "${command}"`, EXIT_USAGE);
