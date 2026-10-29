@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
-  "description": "Fragor command line: run and compare scenarios.",
+  "description": "Fragor command line: run and compare scenarios, import traces.",
   "type": "module",
   "bin": {
     "fragor": "./dist/fragor.mjs"
@@ -13,6 +13,7 @@
   ],
   "dependencies": {
     "@fragor/engine": "workspace:*",
+    "@fragor/importers": "workspace:*",
     "@fragor/scenarios": "workspace:*"
   },
   "devDependencies": {

@@ -7,6 +7,7 @@
   "type": "module",
   "dependencies": {
     "@fragor/engine": "workspace:*",
+    "@fragor/importers": "workspace:*",
     "@fragor/scenarios": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",

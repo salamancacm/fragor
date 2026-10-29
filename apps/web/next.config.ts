@@ -11,7 +11,7 @@ if (basePath !== "" && !/^\/[A-Za-z0-9._-]+$/.test(basePath)) {
 const config: NextConfig = {
   output: "export",
   reactStrictMode: true,
-  transpilePackages: ["@fragor/engine", "@fragor/scenarios"],
+  transpilePackages: ["@fragor/engine", "@fragor/importers", "@fragor/scenarios"],
   images: { unoptimized: true },
   ...(basePath === "" ? {} : { basePath }),
 };

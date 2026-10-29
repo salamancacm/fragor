@@ -32,6 +32,9 @@ importers:
       '@fragor/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@fragor/importers':
+        specifier: workspace:*
+        version: link:../../packages/importers
       '@fragor/scenarios':
         specifier: workspace:*
         version: link:../../packages/scenarios
@@ -90,6 +93,9 @@ importers:
       '@fragor/engine':
         specifier: workspace:*
         version: link:../engine
+      '@fragor/importers':
+        specifier: workspace:*
+        version: link:../importers
       '@fragor/scenarios':
         specifier: workspace:*
         version: link:../scenarios
