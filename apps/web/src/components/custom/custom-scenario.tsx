@@ -5,6 +5,7 @@ import { Download, FileUp, Play, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { downloadText, safeName } from "@/lib/download";
 import { readScenario, scenarioJson } from "@/lib/import";
 import {
   checkTemplate,
@@ -12,6 +13,7 @@ import {
   type TemplateForm as Form,
   templateScenario,
 } from "@/lib/template";
+import { ImportTraces } from "./import-traces";
 import { TemplateForm } from "./template-form";
 
 interface Props {
@@ -53,12 +55,7 @@ function save(s: Saved): void {
 }
 
 export function downloadScenario(s: Scenario): void {
-  const url = URL.createObjectURL(new Blob([scenarioJson(s)], { type: "application/json" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${s.name.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-|-$/g, "") || "scenario"}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadText(`${safeName(s.name, "scenario")}.json`, scenarioJson(s));
 }
 
 function Errors({ errors }: { errors: readonly string[] }) {
@@ -124,9 +121,10 @@ export function CustomScenario({ current, onRun, onClose }: Props) {
         <div className="flex-1">
           <h2 className="text-lg font-semibold">Model your own system</h2>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Fragor does not connect to your services yet: you describe them with numbers from your
-            configuration and metrics, and it simulates what happens when something fails. Start
-            with the quick form, or paste a full scenario. Nothing leaves your browser.
+            Fragor does not connect to your running services yet: you describe them with numbers
+            from your configuration and metrics, or import the OpenTelemetry traces they already
+            produce, and it simulates what happens when something fails. Nothing leaves your
+            browser.
           </p>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
@@ -142,8 +140,9 @@ export function CustomScenario({ current, onRun, onClose }: Props) {
         }}
         className="mt-3"
       >
-        <TabsList>
+        <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="form">Quick form: one service + one dependency</TabsTrigger>
+          <TabsTrigger value="traces">Import traces from your services</TabsTrigger>
           <TabsTrigger value="json">JSON: any architecture</TabsTrigger>
         </TabsList>
 
@@ -166,6 +165,10 @@ export function CustomScenario({ current, onRun, onClose }: Props) {
               Continue in JSON
             </Button>
           </div>
+        </TabsContent>
+
+        <TabsContent value="traces" className="pt-2">
+          <ImportTraces onRun={onRun} />
         </TabsContent>
 
         <TabsContent value="json" className="space-y-3 pt-2">

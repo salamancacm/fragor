@@ -102,7 +102,7 @@ export const TOUR: readonly TourStep[] = [
     id: "your-scenario",
     target: "your-scenario",
     title: "Then try your own system",
-    body: "Fragor does not connect to your services yet: you describe them with a few numbers you already know (threads, response times, traffic) and pick what fails.",
+    body: "Fragor does not connect to your running services yet: you describe them with a few numbers you already know (threads, response times, traffic), or import the OpenTelemetry traces they already produce, and pick what fails.",
   },
 ];
 
