@@ -44,7 +44,7 @@ export function Insights({ findings, onEvidence }: Props) {
                 />
                 <span
                   className={cn(
-                    "rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wider uppercase",
+                    "rounded px-1.5 py-0.5 text-[11px] font-medium capitalize",
                     SEVERITY_CLASS[f.severity],
                   )}
                 >

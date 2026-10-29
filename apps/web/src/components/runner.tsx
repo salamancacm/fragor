@@ -51,7 +51,7 @@ const LEGEND = [
 
 function SectionTitle({ title, help }: { title: string; help?: HelpKey }) {
   return (
-    <h2 className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+    <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
       {title}
       {help !== undefined && <HelpTip topic={help} label={title} />}
     </h2>

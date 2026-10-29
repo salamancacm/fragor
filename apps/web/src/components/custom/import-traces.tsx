@@ -269,7 +269,7 @@ function Result({
       )}
       {report.questions.length > 0 && (
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
             Open questions ({report.questions.length}): what the traces cannot tell
           </h3>
           <ul className="grid gap-2 lg:grid-cols-2">
@@ -286,7 +286,7 @@ function Result({
       )}
       {mine.length > 0 && (
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
             Your answers ({mine.length})
           </h3>
           <ul className="space-y-1 text-xs">

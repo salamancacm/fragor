@@ -6,7 +6,7 @@ import { TONE_VAR } from "./transport";
 export function StoryHeadline({ parts }: { parts: readonly StoryPart[] }) {
   return (
     <div>
-      <p className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.12em] text-brand uppercase">
+      <p className="flex items-center gap-1.5 text-sm font-medium text-brand">
         What happened
         <HelpTip topic="story" label="this summary" />
       </p>

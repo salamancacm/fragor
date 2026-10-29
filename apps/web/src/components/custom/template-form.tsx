@@ -72,9 +72,7 @@ function Num({
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <fieldset className="space-y-3 rounded-xl border p-3">
-      <legend className="px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        {title}
-      </legend>
+      <legend className="px-1 text-sm font-semibold text-foreground">{title}</legend>
       {children}
     </fieldset>
   );
