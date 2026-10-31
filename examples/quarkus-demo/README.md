@@ -110,6 +110,55 @@ The draft built from a calm window reproduces the end-to-end latency that was ob
 p50 / p95 / p99 of 150.5 / 261.6 / 324.0 ms against 150.7 / 257.1 / 319.1 ms measured, before
 answering any question (at this load the placeholders for threads and queues do not matter).
 
+## Capturing metrics (for `fragor import --metrics`)
+
+The services can also expose Prometheus metrics. It is optional and off by default, for the same
+reason as tracing.
+
+```bash
+export MAVEN_OPTS="-Djavax.net.ssl.trustStoreType=Windows-ROOT"   # only behind a TLS-inspecting proxy
+mvn -Pmetrics package -DskipTests       # adds quarkus-micrometer-registry-prometheus to every service
+docker compose up -d --build
+curl -s localhost:8081/q/metrics > order-before.prom   # a snapshot of one service (8080 gateway,
+# ... run the load for a few seconds ...               # 8081 order, 8082 payment, 8083 external-payment)
+curl -s localhost:8081/q/metrics > order-after.prom
+```
+
+Counters only grow, so two snapshots of the same service give the rates of the period between them
+(timed by the service's own `process_uptime_seconds`). A calm period gives traffic, and the
+fault-tolerance series say whether a call has a circuit breaker or a fallback:
+
+```bash
+fragor import traces results/telemetry/traces.jsonl --from ... --to ...   --metrics gateway=gateway-before.prom,gateway-after.prom   --metrics order=order-before.prom,order-after.prom --out draft.json
+```
+
+What the demo's metrics gave in a 4 s calm window at 30 req/s (2026-10-31):
+
+| | Metrics | Configured / traces |
+| --- | --- | --- |
+| Traffic into the gateway | 30.2 req/s (122 requests) | 30 (the traces say 30.01) |
+| Mean response, gateway / order / payment / external API | 164 / 163 / 149 / 143 ms | not set (traces: p50 150.7 ms end to end) |
+| `order` calls to `payment`: rate and mean duration | 30.4 req/s, 150 ms | 1 call per request |
+| `order → payment` circuit breaker | no `ft_circuitbreaker_*` series | disabled in the baseline |
+| `order → payment` fallback | `ft_invocations_total{fallback="notDefined"}` | none in the baseline |
+| Timeouts and retries in the 4 s | none | (the fault starts at 10 s) |
+
+What the metrics showed, which shaped the importer:
+
+- **No percentiles.** Quarkus exports `_count`, `_sum` and `_max` for each timer, so only means are
+  known; p50 and p99 still come from the traces. Percentile histograms need a `MeterFilter`.
+- **Counts are completions.** Under saturation the server counters count requests when they finish,
+  so a period of trouble shows bursts (90 req/s over 7 s at a gateway that receives 30). Use a calm
+  period to measure traffic.
+- **The Vert.x `worker_pool_*` metrics did not follow the load.** While `order` was saturated
+  (100 threads busy, 513 requests answered 503) `worker_pool_active` stayed at 1 and
+  `worker_pool_rejected_total` at 0: the pool Quarkus runs requests on is not the one they measure,
+  at least here. Threads and queue size remain questions for the user.
+- A saturated service can fail to answer a scrape in time (one snapshot of `order` during the fault
+  was empty): take snapshots from a calm period.
+
+Rebuild without the profile (`mvn package -DskipTests`) before the validation runs.
+
 ## Measure and compare
 
 Every service exposes `GET /probe` (served on the Vert.x event loop, so it answers even when all

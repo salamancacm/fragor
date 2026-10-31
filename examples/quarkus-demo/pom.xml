@@ -59,6 +59,19 @@
         </dependency>
       </dependencies>
     </profile>
+    <!--
+      mvn -Pmetrics package: exposes Prometheus metrics at /q/metrics on every service, to capture
+      the text `fragor import metrics` reads. Off by default for the same reason as telemetry.
+    -->
+    <profile>
+      <id>metrics</id>
+      <dependencies>
+        <dependency>
+          <groupId>io.quarkus</groupId>
+          <artifactId>quarkus-micrometer-registry-prometheus</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
   </profiles>
 
   <build>
