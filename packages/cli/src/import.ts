@@ -1,10 +1,14 @@
 import {
+  applyMetrics,
   buildScenario,
   type ObservedSystem,
   observeTraces,
   parseObserved,
   parseOtlp,
+  parseProm,
   renderReport,
+  type ServiceInput,
+  summarizeMetrics,
 } from "@fragor/importers";
 import type { PatchOp } from "@fragor/scenarios";
 import { CliError, EXIT_OK, EXIT_RUNTIME, EXIT_USAGE, type Io } from "./io";
@@ -23,6 +27,8 @@ export interface ImportArgs {
   report?: string | undefined;
   /** Where to write the observed system the scenario was built from. */
   observed?: string | undefined;
+  /** `service=after.prom` or `service=before.prom,after.prom`: the metrics of a service. */
+  metrics?: readonly string[] | undefined;
   set?: readonly string[] | undefined;
   unset?: readonly string[] | undefined;
 }
@@ -88,11 +94,39 @@ function observe(io: Io, a: ImportArgs): { observed: ObservedSystem; warnings: s
   return { observed: r.observed, warnings: [...unread, ...r.warnings] };
 }
 
+/** The metrics of one service from `service=after.prom` or `service=before.prom,after.prom`. */
+function readMetrics(io: Io, spec: string): ServiceInput {
+  const eq = spec.indexOf("=");
+  const service = spec.slice(0, eq);
+  const files = eq < 0 ? [] : spec.slice(eq + 1).split(",");
+  if (service === "" || files.length < 1 || files.length > 2 || files.some((f) => f === ""))
+    throw new CliError(
+      `--metrics expects service=after.prom or service=before.prom,after.prom, got "${spec}"`,
+      EXIT_USAGE,
+    );
+  const [before, after] = files.length === 2 ? files : [undefined, files[0]];
+  const read = (file: string) => {
+    const parsed = parseProm(readText(io, file));
+    if (parsed.samples.length === 0)
+      throw new CliError(`${file}: no metrics found. ${parsed.problems[0] ?? ""}`, EXIT_USAGE);
+    return parsed.samples;
+  };
+  const r = summarizeMetrics(read(after as string), before === undefined ? null : read(before));
+  if (!r.ok) throw new CliError(`${service}: ${r.error}`, EXIT_USAGE);
+  return { service, metrics: r.metrics };
+}
+
 /** `fragor import traces|observed <file>`: a draft scenario and a report of where every number came from. */
 export function runImport(io: Io, a: ImportArgs): number {
   if ((a.kind !== "traces" && a.kind !== "observed") || a.files.length !== 1)
     throw new CliError("usage: import expects `traces <file>` or `observed <file>`", EXIT_USAGE);
-  const { observed, warnings } = observe(io, a);
+  const seen = observe(io, a);
+  const enriched = applyMetrics(
+    seen.observed,
+    (a.metrics ?? []).map((m) => readMetrics(io, m)),
+  );
+  const observed = enriched.observed;
+  const warnings = [...seen.warnings, ...enriched.warnings];
   const answers: PatchOp[] = [
     ...(a.set ?? []).map(parseAssignment),
     ...(a.unset ?? []).map((path): PatchOp => ({ op: "unset", path })),

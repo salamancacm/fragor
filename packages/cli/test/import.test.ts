@@ -152,3 +152,60 @@ describe("fragor import: mistakes", () => {
     expect(r.err).toContain("cannot build a scenario");
   });
 });
+
+const METRICS = join(FIXTURES, "metrics");
+const prom = (service: string, label: string) => join(METRICS, `${service}-${label}.prom`);
+
+describe("fragor import --metrics", () => {
+  const withMetrics = (...more: string[]) =>
+    calm(
+      "--observed",
+      "obs.json",
+      "--metrics",
+      `gateway=${prom("gateway", "calm-a")},${prom("gateway", "calm-b")}`,
+      "--metrics",
+      `order=${prom("order", "calm-a")},${prom("order", "calm-b")}`,
+      ...more,
+    );
+
+  it("measures the traffic from the counters, in agreement with the traces", () => {
+    const r = withMetrics();
+    expect(r.code).toBe(0);
+    expect(r.err).toBe("");
+    const observed = parseObserved(JSON.parse(r.files.get("obs.json") ?? "null"));
+    if (!observed.ok) throw new Error(observed.errors.join(" "));
+    const rps = observed.observed.traffic[0]?.rps;
+    expect(rps?.origin).toBe("observed");
+    expect(rps?.detail).toContain("http_server_requests_seconds_count");
+    // the traces say 30 req/s: no disagreement is reported
+    expect(r.out).not.toContain("Traffic into gateway");
+  });
+
+  it("learns that the call from order to payment has no breaker and no fallback", () => {
+    const observed = parseObserved(JSON.parse(withMetrics().files.get("obs.json") ?? "null"));
+    if (!observed.ok) throw new Error(observed.errors.join(" "));
+    const call = observed.observed.calls.find((c) => c.from === "order");
+    expect(call?.fallback).toMatchObject({ value: false, origin: "observed" });
+    expect(call?.breaker).toMatchObject({ value: false, origin: "inferred" });
+  });
+
+  it("takes one snapshot as the average since the service started, and says so", () => {
+    const r = calm("--metrics", `gateway=${prom("gateway", "calm-b")}`);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("since the service started");
+  });
+
+  it("explains a malformed value, a missing file, or a restart between snapshots", () => {
+    expect(calm("--metrics", "gateway").err).toContain("--metrics expects service=");
+    expect(calm("--metrics", "gateway=nope.prom").err).toContain('cannot read "nope.prom"');
+    const restart = calm(
+      "--metrics",
+      `gateway=${prom("gateway", "calm-b")},${prom("gateway", "calm-a")}`,
+    );
+    expect(restart.code).toBe(2);
+    expect(restart.err).toContain("restarted");
+    expect(
+      calm("--metrics", `gateway=${prom("gateway", "calm-a")},${prom("gateway", "calm-b")},x`).err,
+    ).toContain("--metrics expects service=");
+  });
+});

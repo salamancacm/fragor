@@ -11,7 +11,8 @@ export const USAGE = `Usage:
   fragor compare <before.json> <after.json> [--seed N] [--json]
   fragor schema [--out file]
   fragor import traces <traces.jsonl> [--from ISO] [--to ISO] [--name N] [--out scenario.json]
-                [--report report.md] [--observed observed.json] [--set path=value]... [--unset path]...
+                [--metrics service=[before.prom,]after.prom]... [--report report.md]
+                [--observed observed.json] [--set path=value]... [--unset path]...
   fragor import observed <observed.json> [--out scenario.json] [--report report.md] [--set ...]
 
   --set path=value  edit the scenario before running; items of nodes, edges, traffic and faults
@@ -27,6 +28,10 @@ export const USAGE = `Usage:
                     where every number came from and what is still a placeholder. --from/--to limit
                     it to requests that started in that time range (use a calm one: response times
                     include time waiting for a worker); --set answers the open questions
+  --metrics s=files add what a service's own Prometheus metrics (/q/metrics) say: its traffic and
+                    whether its calls have a circuit breaker or fallback. Two snapshots of the
+                    same instance (before, after) give the rates of that period; one gives the
+                    average since the service started. Repeat it for each service
 
 Results come from a deterministic simulation of your assumptions; they are not predictions.
 `;
@@ -43,6 +48,7 @@ const OPTIONS = {
   to: { type: "string" },
   report: { type: "string" },
   observed: { type: "string" },
+  metrics: { type: "string", multiple: true },
   help: { type: "boolean", short: "h" },
 } as const;
 
