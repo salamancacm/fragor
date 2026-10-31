@@ -447,3 +447,34 @@ attribute names are read. Alternatives: receiving OTLP in a local server (needs 
 a new dependency; the Collector already converts to JSON), reading Jaeger's `/api` (documented as
 internal), metrics first (no topology), importing only through the JSON tab (the questions need
 forms).
+
+## 2026-10-31 — M10: refine the import with Prometheus metrics
+
+Context: traces give topology but are often sampled, and cannot show whether a call has a circuit
+breaker or a fallback. Quarkus can export Prometheus metrics (`quarkus-micrometer-registry-prometheus`,
+`/q/metrics`, verified in its guide). A spike on the demo (profile `metrics`, real scrapes during a
+k6 run) showed: timers export only `_count`, `_sum` and `_max` (no percentiles without a
+`MeterFilter`); the `ft_*` series carry the guarded method in a `method` tag and a breaker's
+series exist only when one is enabled; server counters count completions, so only a calm window
+measures traffic; `process_uptime_seconds` is exported, so two snapshots can be timed without
+timestamps; and the Vert.x `worker_pool_*` metrics did not follow the load (`active` stayed at 1
+and `rejected` at 0 while the service saturated and answered 513 requests with 503).
+Decision: `parseProm` reads the text format (pure, no dependency); `summarizeMetrics(after, before?)`
+turns one or two snapshots of a service into rates of that window (elapsed time from the service's
+own uptime), mean latency, 5xx share, client calls by `clientName` and one `Guard` per `ft_*`
+method; `applyMetrics` refines an `ObservedSystem`: the measured traffic replaces what was there
+(except what a person gave), and breaker and fallback replace only guesses (`assumed`, `inferred`),
+with a warning if they contradict something read from configuration. A guard is attributed to a
+call only when the service has exactly one method and one outgoing call; otherwise a warning says
+it was not attributed. The CLI gets `--metrics service=[before.prom,]after.prom`.
+Metrics refine, they do not build topology: client metrics name the target by `clientName`, not by
+a service id, so metrics alone cannot place the calls. Latency stays with the traces (mean and max
+do not give p50 and p99, and nothing is invented to fill the gap). Pool size and queue limit are not
+read from the metrics because the pool metrics did not match the saturated pool.
+Evidence: on the demo's calm window the counters give 30.2 req/s against the traces' 30.01 and
+the load's 30; the breaker and fallback it reports agree with the demo's configuration.
+Limits (documented): a restart between two snapshots is refused; a single snapshot averages the
+whole uptime and says so; sampled traces are still not scaled; no Prometheus HTTP client yet (files
+only), and no web upload yet. Alternatives: querying a Prometheus server (needs the user's
+URL and credentials; the files already work with `curl`), reading `worker_pool_*` for threads
+(wrong on the demo), deriving p50/p99 from mean and max (invented numbers).

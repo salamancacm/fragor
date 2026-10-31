@@ -183,13 +183,19 @@ scenarios/src
 
 Turns what a running system showed into a draft scenario, without ever claiming more than it knows
 (plan: [CONNECT-PLAN.md](CONNECT-PLAN.md)). Pure TypeScript, no network and no file access; readers
-of metrics (a later milestone) will produce its input; the reader of OpenTelemetry traces is here.
+of metrics refine its input (`applyMetrics`); the reader of OpenTelemetry traces is here.
 
 ```
 importers/src
 ├─ otlp.ts          parseOtlp: OTLP/JSON traces (Collector file exporter lines, one document, an
 │                   array) -> Span[] (ids hex, 64-bit times as decimal strings, enums as integers)
 ├─ trace-index.ts   spans by parent, the time window of a request, rootRange
+├─ prom.ts          parseProm: the Prometheus text format -> Sample[] (name, labels, value)
+├─ metrics.ts       summarizeMetrics(after, before?) -> rates of a window (timed by the service's
+│                   process_uptime_seconds), mean latency, 5xx share, client calls by clientName and
+│                   the ft_* guard series (fallback defined, breaker/bulkhead present, retries, timeouts)
+├─ enrich.ts        applyMetrics(observed, [{ service, metrics }]) -> observed + warnings: measured
+│                   traffic, breaker and fallback of a call (only when the call can be told)
 ├─ stats.ts         quantiles, clusterFloor (the lower edge of a tight cluster: the timeout
 │                   estimator), union of intervals
 ├─ traces.ts        observeTraces(spans, { fromMs, toMs }) -> ObservedSystem + warnings: services

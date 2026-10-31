@@ -146,6 +146,19 @@ What is read from the traces:
 Inferred timeouts and retries are asked to be confirmed. The draft is a starting point: run it, then
 compare it with what you observed.
 
+**Adding metrics (CLI).** If your services expose Prometheus metrics (Quarkus:
+`quarkus-micrometer-registry-prometheus`, served at `/q/metrics`), pass a snapshot per service with
+`--metrics`: `--metrics order=after.prom` averages everything since the service started, while
+`--metrics order=before.prom,after.prom` (two snapshots of the same instance, taken seconds or
+minutes apart in a calm period) gives the rates of that period. Fragor then
+measures the **traffic** from the counters (useful when the traces are sampled) and reads the
+`ft_*` series of SmallRye Fault Tolerance to learn whether a call has a **circuit breaker** or a
+**fallback**, which the traces cannot show. Metrics only refine a system that has its topology from
+traces (or an observed-system file): they never replace a value you gave, and the breaker and
+fallback never replace something read from configuration, they only warn if the two disagree. If a
+service guards several methods or makes several calls, Fragor does not guess which is which and says
+so. Quarkus timers have no percentiles unless you enable them, so latency still comes from the traces.
+
 To publish the app, serve `apps/web/out` with any static file server. To serve it from a
 sub-path, build with `FRAGOR_BASE_PATH=/name pnpm web:build` (in Git Bash on Windows, prefix
 `MSYS_NO_PATHCONV=1` so the path is not rewritten).

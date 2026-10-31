@@ -1,8 +1,8 @@
 # Connecting running services to Fragor: plan
 
-Status: **proposed** (2026-10-22); **M8 and M9 are done** (the observed-system model, the draft
-builder, and the import of OpenTelemetry traces in the CLI and the web app, see
-[ARCHITECTURE.md](ARCHITECTURE.md) and [USAGE.md](USAGE.md#importing-traces)); the reader of metrics is not. Today Fragor asks
+Status: **proposed** (2026-10-22); **M8, M9 and M10 are done** (the observed-system model, the draft
+builder, the import of OpenTelemetry traces in the CLI and the web app, and Prometheus metrics that
+refine the CLI import, see [ARCHITECTURE.md](ARCHITECTURE.md) and [USAGE.md](USAGE.md#importing-traces)). Today Fragor asks
 you to *describe* your system (quick form or JSON). This plan lets a developer point Fragor at services they run, locally
 or in a real environment, and get a calibrated scenario to break. Decisions go to
 [DECISIONS.md](DECISIONS.md) once approved.
@@ -104,14 +104,36 @@ The last row's keys are exactly the ones the Quarkus demo sets and the validatio
 - Only the stable HTTP attribute names above are read; the legacy names (`http.status_code`,
   `net.peer.name`) are not supported (not verified).
 
-### UNVERIFIED (to settle in M10, never assumed)
+### Settled by the spike of M10, on the Quarkus demo (2026-10-31)
+
+- **Scrape path** ([Quarkus Micrometer guide](https://quarkus.io/guides/telemetry-micrometer)): the
+  extension `quarkus-micrometer-registry-prometheus` serves `/q/metrics` (property
+  `quarkus.micrometer.export.prometheus.path`); with the management interface it moves to port
+  9000. Confirmed on the demo: HTTP 200 on every service.
+- **SmallRye Fault Tolerance metrics** ([metrics](https://smallrye.io/docs/smallrye-fault-tolerance/6.11.4/reference/metrics.html),
+  [retry](https://smallrye.io/docs/smallrye-fault-tolerance/6.11.4/reference/retry.html),
+  [timeout](https://smallrye.io/docs/smallrye-fault-tolerance/6.11.4/reference/timeout.html),
+  [circuit breaker](https://smallrye.io/docs/smallrye-fault-tolerance/6.11.4/reference/circuit-breaker.html),
+  [bulkhead](https://smallrye.io/docs/smallrye-fault-tolerance/6.11.4/reference/bulkhead.html)):
+  `ft.retry.calls.total` (`retried`, `retryResult`), `ft.retry.retries.total`,
+  `ft.timeout.calls.total` (`timedOut`), `ft.timeout.executionDuration`,
+  `ft.circuitbreaker.calls.total` (`circuitBreakerResult`), `ft.circuitbreaker.state.total` and
+  `.current` (`state`), `ft.circuitbreaker.opened.total`, `ft.bulkhead.calls.total`
+  (`bulkheadResult`), `ft.bulkhead.executionsRunning`, `.executionsWaiting`, `.runningDuration`,
+  `.waitingDuration`. In Prometheus the dots become underscores (`ft_retry_retries_total`),
+  as the demo's scrape shows.
+- **REST client metrics**: the demo exports `http_client_requests_seconds_{count,sum,max}` with the
+  tags `clientName`, `address`, `method`, `outcome`, `status` and `uri`; the guide does not name them.
+- Timers have only `_count`, `_sum` and `_max`; no percentiles. Counters count completions.
+  `process_uptime_seconds` is exported, which times a window without timestamps.
+- The Vert.x `worker_pool_*` series did not reflect the saturated request pool: not used.
+
+### UNVERIFIED (never assumed)
 
 - Parameters of Jaeger's `/api/v3` trace query.
-- The names of the other `ft.*` metrics (timeout, retry, circuit breaker, bulkhead), the REST
-  client metric names, and thread-pool metric names.
 - The maximum points per series of a Prometheus range query (query in chunks to be safe).
-- The default Prometheus scrape path in Quarkus (`/q/metrics` is expected).
 - Sampled traces: the rate and call probabilities of a sampled file are not scaled up.
+- Which pool metric, if any, reports the Quarkus request pool's size and queue.
 
 ## 5. Design
 
@@ -144,7 +166,7 @@ Effort is relative (S, M, L).
 | --- | --- | --- | --- |
 | **M8** (done) | `ObservedSystem` types, provenance, `buildScenario`, the import report, versioned JSON Schema | Fixtures built by hand produce valid scenarios; every field carries its source; deterministic output. Met: the demo's configuration builds the mirror scenario and simulates identically | M |
 | **M9** (done) | Traces: OTLP/JSON(L) parser to `ObservedSystem`; infer topology, probabilities, attempts, timeout, self time; `fragor import traces`; web *Import* tab. **Starts with a spike** that adds OpenTelemetry to the Quarkus demo and settles the UNVERIFIED items | Demo traces give the four-service chain, retries and the 2 s timeout of `order → payment`. Met: the chain, retries (at least 2 of 3), timeouts of 2,053 ms and 9,999 ms (configured 2,000 and 10,000), and a draft whose simulated latency matches the measured one | L |
-| **M10** | Metrics: Prometheus text parser and read-only HTTP client; rate, errors, latency, fallback use; documented `MeterFilter` for percentiles, with a clear fallback (mean and max) marked `assumed` | Demo metrics agree with the traces to within sampling error | M |
+| **M10** (done) | Metrics: Prometheus text parser; rate, breaker and fallback from the `ft_*` series, refining a system built from traces; CLI `--metrics`. Not done: a read-only HTTP client, a web upload, percentile histograms (mean and max do not give p50/p99, so latency stays with the traces) | Demo metrics agree with the traces to within sampling error. Met: 30.2 req/s against 30.01, and the breaker and fallback agree with the configuration | M |
 | **M11** | `fragor validate` and a *How close is the model?* panel: simulated vs observed per service and edge, the largest gaps, which `assumed` values matter most (sensitivity) | On the demo, the same tolerances as the existing [validation matrix](../examples/quarkus-demo/README.md) | M |
 | **M12** | Local lab recipe (compose with a collector); `application.properties` reader; optionally a Quarkus extension that reads annotations at build time for exact policy parameters, and export back to `application.properties` and annotations | Round trip on the demo: import, change a policy, export, the demo config matches | L |
 

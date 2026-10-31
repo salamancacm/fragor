@@ -50,8 +50,8 @@ runs in your browser and nothing is sent anywhere. The first visit offers a guid
 
 > Fragor does not connect to your running services **yet**: you describe them with numbers from
 > your configuration and metrics, or import the traces they already produce
-> ([how](docs/USAGE.md#importing-traces)). Live connections and metrics are planned, see the
-> [roadmap](docs/CONNECT-PLAN.md).
+> ([how](docs/USAGE.md#importing-traces)), refined with Prometheus metrics from the CLI. Live
+> connections are planned, see the [roadmap](docs/CONNECT-PLAN.md).
 
 ## What the engine models
 
@@ -97,10 +97,10 @@ fallback changes. What-if from the command line:
 Done: engine, resilience policies, scenarios and findings, CLI, web app with an animated replay,
 your own scenario in the browser, a first-visit guide, validation against real Quarkus services,
 and **importing OpenTelemetry traces** into a draft scenario that says where every number came from
-(a draft built from the demo's traces reproduces the latency that was measured).
+(a draft built from the demo's traces reproduces the latency that was measured), refined with
+**Prometheus metrics** (measured traffic, circuit breaker and fallback).
 
-Next: Prometheus metrics, and a report of how well the model reproduces what was observed. The plan
-is in [docs/CONNECT-PLAN.md](docs/CONNECT-PLAN.md).
+Next: a report of how well the model reproduces what was observed. The plan is in [docs/CONNECT-PLAN.md](docs/CONNECT-PLAN.md).
 
 ## Development
 
