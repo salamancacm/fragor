@@ -1,0 +1,11 @@
+# TYPE process_uptime_seconds gauge
+# HELP process_uptime_seconds The uptime of the Java virtual machine
+process_uptime_seconds 241.828
+# TYPE http_server_requests_seconds summary
+# HELP http_server_requests_seconds HTTP server request processing time
+http_server_requests_seconds_count{method="POST",outcome="SUCCESS",status="200",uri="/admin/latency"} 1.0
+http_server_requests_seconds_sum{method="POST",outcome="SUCCESS",status="200",uri="/admin/latency"} 0.002794816
+http_server_requests_seconds_count{method="DELETE",outcome="SUCCESS",status="200",uri="/admin/latency"} 1.0
+http_server_requests_seconds_sum{method="DELETE",outcome="SUCCESS",status="200",uri="/admin/latency"} 0.001521411
+http_server_requests_seconds_count{method="POST",outcome="SUCCESS",status="200",uri="/charge"} 1689.0
+http_server_requests_seconds_sum{method="POST",outcome="SUCCESS",status="200",uri="/charge"} 1731.413221804

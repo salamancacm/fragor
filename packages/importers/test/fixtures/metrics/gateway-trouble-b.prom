@@ -1,0 +1,30 @@
+# TYPE ft_timeout_calls counter
+# HELP ft_timeout_calls  
+ft_timeout_calls_total{method="fragor.demo.gateway.OrderGateway.create",timedOut="true"} 334.0
+ft_timeout_calls_total{method="fragor.demo.gateway.OrderGateway.create",timedOut="false"} 2688.0
+# TYPE process_uptime_seconds gauge
+# HELP process_uptime_seconds The uptime of the Java virtual machine
+process_uptime_seconds 274.884
+# TYPE http_client_requests_seconds summary
+# HELP http_client_requests_seconds  
+http_client_requests_seconds_count{address="order:8081",clientName="order",method="POST",outcome="SERVER_ERROR",status="503",uri="/orders"} 961.0
+http_client_requests_seconds_sum{address="order:8081",clientName="order",method="POST",outcome="SERVER_ERROR",status="503",uri="/orders"} 2.854468943
+http_client_requests_seconds_count{address="order:8081",clientName="order",method="POST",outcome="SUCCESS",status="200",uri="/orders"} 1961.0
+http_client_requests_seconds_sum{address="order:8081",clientName="order",method="POST",outcome="SUCCESS",status="200",uri="/orders"} 8943.36215606
+# TYPE ft_timeout_executionDuration_seconds summary
+# HELP ft_timeout_executionDuration_seconds  
+ft_timeout_executionDuration_seconds_count{method="fragor.demo.gateway.OrderGateway.create"} 3022.0
+ft_timeout_executionDuration_seconds_sum{method="fragor.demo.gateway.OrderGateway.create"} 9763.445827607
+# TYPE ft_timer_scheduled gauge
+# HELP ft_timer_scheduled  
+ft_timer_scheduled{id="1"} 116.0
+# TYPE http_server_requests_seconds summary
+# HELP http_server_requests_seconds HTTP server request processing time
+http_server_requests_seconds_count{method="POST",outcome="SUCCESS",status="200",uri="/checkout"} 1727.0
+http_server_requests_seconds_sum{method="POST",outcome="SUCCESS",status="200",uri="/checkout"} 4620.182960492
+http_server_requests_seconds_count{method="POST",outcome="SERVER_ERROR",status="500",uri="/checkout"} 1295.0
+http_server_requests_seconds_sum{method="POST",outcome="SERVER_ERROR",status="500",uri="/checkout"} 13108.394340634
+# TYPE ft_invocations counter
+# HELP ft_invocations  
+ft_invocations_total{fallback="notDefined",method="fragor.demo.gateway.OrderGateway.create",result="exceptionThrown"} 1295.0
+ft_invocations_total{fallback="notDefined",method="fragor.demo.gateway.OrderGateway.create",result="valueReturned"} 1727.0

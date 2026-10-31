@@ -1,0 +1,41 @@
+# TYPE ft_retry_retries counter
+# HELP ft_retry_retries  
+ft_retry_retries_total{method="fragor.demo.order.PaymentGateway.charge"} 153.0
+# TYPE http_server_requests_seconds summary
+# HELP http_server_requests_seconds HTTP server request processing time
+http_server_requests_seconds_count{method="POST",outcome="SUCCESS",status="200",uri="/orders"} 2079.0
+http_server_requests_seconds_sum{method="POST",outcome="SUCCESS",status="200",uri="/orders"} 10905.890870414
+http_server_requests_seconds_count{method="POST",outcome="SERVER_ERROR",status="503",uri="/orders"} 1031.0
+http_server_requests_seconds_sum{method="POST",outcome="SERVER_ERROR",status="503",uri="/orders"} 0.80705209
+# TYPE http_client_requests_seconds summary
+# HELP http_client_requests_seconds  
+http_client_requests_seconds_count{address="payment:8082",clientName="payment",method="POST",outcome="SUCCESS",status="200",uri="/payments"} 2232.0
+http_client_requests_seconds_sum{address="payment:8082",clientName="payment",method="POST",outcome="SUCCESS",status="200",uri="/payments"} 6254.709122792
+# TYPE ft_retry_calls counter
+# HELP ft_retry_calls  
+ft_retry_calls_total{method="fragor.demo.order.PaymentGateway.charge",retried="true",retryResult="maxRetriesReached"} 0.0
+ft_retry_calls_total{method="fragor.demo.order.PaymentGateway.charge",retried="true",retryResult="maxDurationReached"} 0.0
+ft_retry_calls_total{method="fragor.demo.order.PaymentGateway.charge",retried="false",retryResult="maxDurationReached"} 0.0
+ft_retry_calls_total{method="fragor.demo.order.PaymentGateway.charge",retried="false",retryResult="valueReturned"} 1963.0
+ft_retry_calls_total{method="fragor.demo.order.PaymentGateway.charge",retried="true",retryResult="exceptionNotRetryable"} 0.0
+ft_retry_calls_total{method="fragor.demo.order.PaymentGateway.charge",retried="false",retryResult="exceptionNotRetryable"} 0.0
+ft_retry_calls_total{method="fragor.demo.order.PaymentGateway.charge",retried="true",retryResult="valueReturned"} 116.0
+ft_retry_calls_total{method="fragor.demo.order.PaymentGateway.charge",retried="false",retryResult="maxRetriesReached"} 0.0
+# TYPE ft_invocations counter
+# HELP ft_invocations  
+ft_invocations_total{fallback="notDefined",method="fragor.demo.order.PaymentGateway.charge",result="exceptionThrown"} 0.0
+ft_invocations_total{fallback="notDefined",method="fragor.demo.order.PaymentGateway.charge",result="valueReturned"} 2079.0
+# TYPE process_uptime_seconds gauge
+# HELP process_uptime_seconds The uptime of the Java virtual machine
+process_uptime_seconds 279.0
+# TYPE ft_timeout_calls counter
+# HELP ft_timeout_calls  
+ft_timeout_calls_total{method="fragor.demo.order.PaymentGateway.charge",timedOut="false"} 2079.0
+ft_timeout_calls_total{method="fragor.demo.order.PaymentGateway.charge",timedOut="true"} 153.0
+# TYPE ft_timer_scheduled gauge
+# HELP ft_timer_scheduled  
+ft_timer_scheduled{id="1"} 74.0
+# TYPE ft_timeout_executionDuration_seconds summary
+# HELP ft_timeout_executionDuration_seconds  
+ft_timeout_executionDuration_seconds_count{method="fragor.demo.order.PaymentGateway.charge"} 2232.0
+ft_timeout_executionDuration_seconds_sum{method="fragor.demo.order.PaymentGateway.charge"} 6000.614723044
